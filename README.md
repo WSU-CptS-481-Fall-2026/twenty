@@ -30,6 +30,8 @@ Twenty gives technical teams the building blocks for a custom CRM that meets com
 
 # Installation
 
+For isolated Linux development worktrees and T3 actions, see [Linux development](docs/linux-development.md).
+
 ### <img src="./packages/twenty-website/public/images/readme/globe-icon.svg" width="14" height="14"/> Cloud
 
 The fastest way to get started. Sign up at [twenty.com](https://twenty.com) and spin up a workspace in under a minute, with no infrastructure to manage and always up to date.

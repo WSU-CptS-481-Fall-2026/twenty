@@ -1,0 +1,82 @@
+[
+  {
+    "id": "twenty-setup",
+    "name": "Set up and start Twenty",
+    "command": "\"$HOME/.local/bin/twenty-dev\" setup",
+    "icon": "configure",
+    "runOnWorktreeCreate": true,
+    "async": false
+  },
+  {
+    "id": "twenty-start",
+    "name": "Start Twenty",
+    "command": "\"$HOME/.local/bin/twenty-dev\" start",
+    "icon": "play",
+    "runOnWorktreeCreate": false,
+    "async": false
+  },
+  {
+    "id": "twenty-status",
+    "name": "Twenty status",
+    "command": "\"$HOME/.local/bin/twenty-dev\" status",
+    "icon": "configure",
+    "runOnWorktreeCreate": false,
+    "async": false
+  },
+  {
+    "id": "twenty-stop",
+    "name": "Stop Twenty",
+    "command": "\"$HOME/.local/bin/twenty-dev\" stop",
+    "icon": "configure",
+    "runOnWorktreeCreate": false,
+    "async": false
+  },
+  {
+    "id": "twenty-check-front",
+    "name": "Check frontend types",
+    "command": "\"$HOME/.local/bin/twenty-dev\" check front",
+    "icon": "test",
+    "runOnWorktreeCreate": false,
+    "async": false
+  },
+  {
+    "id": "twenty-check-server",
+    "name": "Check backend types",
+    "command": "\"$HOME/.local/bin/twenty-dev\" check server",
+    "icon": "test",
+    "runOnWorktreeCreate": false,
+    "async": false
+  },
+  {
+    "id": "twenty-shared",
+    "name": "Rebuild shared packages",
+    "command": "\"$HOME/.local/bin/twenty-dev\" check shared",
+    "icon": "configure",
+    "runOnWorktreeCreate": false,
+    "async": false
+  },
+  {
+    "id": "twenty-migrate",
+    "name": "Apply database migrations",
+    "command": "\"$HOME/.local/bin/twenty-dev\" migrate",
+    "icon": "configure",
+    "runOnWorktreeCreate": false,
+    "async": false
+  },
+  {
+    "id": "twenty-reset",
+    "name": "Reset this worktree environment",
+    "command": "\"$HOME/.local/bin/twenty-dev\" reset",
+    "icon": "configure",
+    "runOnWorktreeCreate": false,
+    "async": false
+  },
+  {
+    "id": "twenty-remove",
+    "name": "Remove this worktree environment",
+    "command": "\"$HOME/.local/bin/twenty-dev\" remove",
+    "icon": "configure",
+    "runOnWorktreeCreate": false,
+    "async": false
+  }
+]

@@ -1,0 +1,75 @@
+{
+  "$schema": "https://t3.codes/schema/t3.json",
+  "scripts": [
+    {
+      "name": "Set up and start Twenty",
+      "command": "\"$HOME/.local/bin/twenty-dev\" setup",
+      "icon": "configure",
+      "runOnWorktreeCreate": true,
+      "async": false
+    },
+    {
+      "name": "Start Twenty",
+      "command": "\"$HOME/.local/bin/twenty-dev\" start",
+      "icon": "play",
+      "runOnWorktreeCreate": false,
+      "async": false
+    },
+    {
+      "name": "Twenty status",
+      "command": "\"$HOME/.local/bin/twenty-dev\" status",
+      "icon": "configure",
+      "runOnWorktreeCreate": false,
+      "async": false
+    },
+    {
+      "name": "Stop Twenty",
+      "command": "\"$HOME/.local/bin/twenty-dev\" stop",
+      "icon": "configure",
+      "runOnWorktreeCreate": false,
+      "async": false
+    },
+    {
+      "name": "Check frontend types",
+      "command": "\"$HOME/.local/bin/twenty-dev\" check front",
+      "icon": "test",
+      "runOnWorktreeCreate": false,
+      "async": false
+    },
+    {
+      "name": "Check backend types",
+      "command": "\"$HOME/.local/bin/twenty-dev\" check server",
+      "icon": "test",
+      "runOnWorktreeCreate": false,
+      "async": false
+    },
+    {
+      "name": "Rebuild shared packages",
+      "command": "\"$HOME/.local/bin/twenty-dev\" check shared",
+      "icon": "configure",
+      "runOnWorktreeCreate": false,
+      "async": false
+    },
+    {
+      "name": "Apply database migrations",
+      "command": "\"$HOME/.local/bin/twenty-dev\" migrate",
+      "icon": "configure",
+      "runOnWorktreeCreate": false,
+      "async": false
+    },
+    {
+      "name": "Reset this worktree environment",
+      "command": "\"$HOME/.local/bin/twenty-dev\" reset",
+      "icon": "configure",
+      "runOnWorktreeCreate": false,
+      "async": false
+    },
+    {
+      "name": "Remove this worktree environment",
+      "command": "\"$HOME/.local/bin/twenty-dev\" remove",
+      "icon": "configure",
+      "runOnWorktreeCreate": false,
+      "async": false
+    }
+  ]
+}

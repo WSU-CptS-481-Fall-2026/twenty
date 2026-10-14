@@ -1,0 +1,763 @@
+#!/usr/bin/env python3
+"""Own one Twenty development environment per canonical Git worktree."""
+import argparse
+import dataclasses
+import fcntl
+import re
+import hashlib
+import json
+import os
+from pathlib import Path
+import secrets
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.request
+
+
+
+
+@dataclasses.dataclass(frozen=True)
+class Worktree:
+    root: Path
+    key: str
+    state_dir: Path
+    compose_project: str
+
+@dataclasses.dataclass(frozen=True)
+class ProcessIdentity:
+    pid: int
+    start_ticks: int
+    boot_id: str
+
+class Failure(Exception):
+    pass
+
+def atomic(path, text, mode=0o600):
+    fd, name = tempfile.mkstemp(prefix=".tmp-", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w") as stream:
+            os.fchmod(stream.fileno(), mode)
+            stream.write(text)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(name, str(path))
+    finally:
+        if os.path.exists(name):
+            os.unlink(name)
+
+def identity(pid):
+    try:
+        fields = Path("/proc/{}/stat".format(pid)).read_text().rsplit(")", 1)[1].split()
+        if fields[0] == "Z":
+            return None
+        return ProcessIdentity(pid, int(fields[19]),
+                               Path("/proc/sys/kernel/random/boot_id").read_text().strip())
+    except (OSError, ValueError, IndexError):
+        return None
+
+def alive(record):
+    try:
+        return bool(record and identity(record["pid"]) == ProcessIdentity(**record)
+                    and os.getpgid(record["pid"]) == record["pid"])
+    except ProcessLookupError:
+        return False
+
+def group_members(pgid):
+    members = []
+    for path in Path("/proc").iterdir():
+        if path.name.isdigit():
+            try:
+                if os.getpgid(int(path.name)) == pgid and identity(int(path.name)):
+                    members.append(path)
+            except ProcessLookupError:
+                pass
+    return members
+
+def available(port):
+    with socket.socket() as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(("127.0.0.1", port))
+            return True
+        except OSError:
+            return False
+
+def free_port(exclude):
+    while True:
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        if port not in exclude:
+            return port
+
+def halt(record):
+    if not alive(record):
+        return
+    os.killpg(record["pid"], signal.SIGTERM)
+    deadline = time.monotonic() + 15
+    while alive(record) and time.monotonic() < deadline:
+        time.sleep(0.2)
+    if alive(record):
+        os.killpg(record["pid"], signal.SIGKILL)
+        deadline = time.monotonic() + 5
+        while alive(record) and time.monotonic() < deadline:
+            time.sleep(0.1)
+        if alive(record):
+            raise Failure("Owned process did not stop")
+
+def supervise(args):
+    signal.signal(signal.SIGTERM, lambda *_: None)
+    child = subprocess.Popen(args)
+    result = child.wait()
+    os.killpg(os.getpgrp(), signal.SIGTERM)
+    deadline = time.monotonic() + 10
+    while len(group_members(os.getpgrp())) > 1:
+        if time.monotonic() >= deadline:
+            os.killpg(os.getpgrp(), signal.SIGKILL)
+        time.sleep(0.1)
+    return result
+
+def launch(w, state, name, args, cwd, env):
+    with (w.state_dir / (name + ".log")).open("wb", buffering=0) as log:
+        process = subprocess.Popen([sys.executable, str(Path(__file__).resolve()),
+                                    "--supervise"] + args, cwd=cwd, env=env,
+                                   stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                                   start_new_session=True, close_fds=True)
+    record = identity(process.pid)
+    if record is None:
+        raise Failure(name + " failed to launch")
+    state[name + "_process"] = dataclasses.asdict(record)
+    save(w, state)
+
+
+@dataclasses.dataclass(frozen=True)
+class Ports:
+    postgres: int
+    redis: int
+    api: int
+    front: int
+
+
+ROLES = ('api', 'worker', 'front')
+
+
+def redact(text):
+    text = re.sub(r'(postgres(?:ql)?://[^: /]+:)[^@\s]+@', r'\1[redacted]@', text)
+    return '\n'.join(line for line in text.splitlines()
+                     if not any(key in line.lower() for key in ('password', 'secret', 'token')))
+
+
+def run(args, cwd=None, env=None, timeout=120, log=None):
+    output_file = log.open('w+') if log else tempfile.TemporaryFile(mode='w+')
+    os.fchmod(output_file.fileno(), 0o600)
+    with output_file as output:
+        process = subprocess.Popen(args, cwd=cwd, env=env, text=True, start_new_session=True,
+                                   stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT)
+        try:
+            process.wait(timeout=timeout)
+        except (subprocess.TimeoutExpired, KeyboardInterrupt):
+            os.killpg(process.pid, signal.SIGTERM)
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.wait()
+            raise Failure('Command interrupted or timed out: ' + ' '.join(args[:3]))
+        finally:
+            output.seek(0)
+            result = output.read()
+        if process.returncode:
+            raise Failure('Command failed: ' + redact(' '.join(args[:3])) + '\n' +
+                          '\n'.join(redact(result).splitlines()[-20:]))
+        return result
+
+
+def locate():
+    root = Path(run(['git', 'rev-parse', '--show-toplevel']).strip()).resolve()
+    for relative in ('packages/twenty-server/project.json', 'packages/twenty-front/project.json',
+                     '.yarn/releases/yarn-4.13.0.cjs'):
+        if not (root / relative).is_file():
+            raise Failure('Not a compatible Twenty worktree: missing ' + relative)
+    key = hashlib.sha256(str(root).encode()).hexdigest()[:20]
+    return Worktree(root, key, Path.home() / '.local/state/twenty' / key, 'twenty-' + key)
+
+
+def save(w, state):
+    atomic(w.state_dir / 'environment.json', json.dumps(state, indent=2) + '\n')
+
+
+def load(w):
+    path = w.state_dir / 'environment.json'
+    if not path.exists():
+        return None
+    try:
+        state = json.loads(path.read_text())
+        if state['schema'] != 1 or state['root'] != str(w.root):
+            raise ValueError('identity')
+        ports = dataclasses.astuple(Ports(**state['ports']))
+        if len(set(ports)) != 4 or not all(type(p) is int and 1024 <= p <= 65535 for p in ports):
+            raise ValueError('ports')
+        for key in ('database_password', 'app_secret'):
+            if not re.fullmatch('[a-f0-9]{48}', state[key]):
+                raise ValueError(key)
+        if state['phase'] not in ('fresh', 'initializing', 'seeding', 'ready'):
+            raise ValueError('phase')
+        for name in ROLES:
+            record = state[name + '_process']
+            if record is not None:
+                p = ProcessIdentity(**record)
+                if type(p.pid) is not int or p.pid <= 1 or type(p.start_ticks) is not int or p.start_ticks <= 0 or not isinstance(p.boot_id, str):
+                    raise ValueError('process')
+        return state
+    except (KeyError, ValueError, TypeError):
+        raise Failure('Invalid environment manifest; refusing mutation: ' + str(path))
+
+
+def new_state(w):
+    ports = {}
+    for name in ('postgres', 'redis', 'api', 'front'):
+        ports[name] = free_port(set(ports.values()))
+    return dict(schema=1, root=str(w.root), ports=ports, phase='fresh',
+                database_password=secrets.token_hex(24), app_secret=secrets.token_hex(24),
+                fingerprints={}, **{name + '_process': None for name in ROLES})
+
+
+def reserve_ports(w, state=None):
+    with (w.state_dir.parent / '.ports.lock').open('a') as lock:
+        os.fchmod(lock.fileno(), 0o600)
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        reserved = set()
+        for path in w.state_dir.parent.glob('*/environment.json'):
+            if path.parent == w.state_dir:
+                continue
+            try:
+                other = json.loads(path.read_text())
+                key = hashlib.sha256(other['root'].encode()).hexdigest()[:20]
+                ports = dataclasses.astuple(Ports(**other['ports']))
+                if other['schema'] == 1 and key == path.parent.name and all(type(p) is int and 1024 <= p <= 65535 for p in ports):
+                    reserved.update(ports)
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+        state = new_state(w) if state is None else state
+        for role in state['ports']:
+            port = free_port(reserved)
+            state['ports'][role] = port
+            reserved.add(port)
+        save(w, state)
+        return state
+
+
+def runtime_env():
+    env = os.environ.copy()
+    # Nx rewrites color settings; conflicting flags keep Prettier workers alive.
+    for key in ('FORCE_COLOR', 'NO_COLOR'):
+        env.pop(key, None)
+    node = Path.home() / '.local/opt/node-24/bin'
+    env['PATH'] = os.pathsep.join(([str(node)] if node.is_dir() else []) + [env.get('PATH', '')])
+    env.update(NX_DAEMON='false', NX_NO_CLOUD='true', NX_SKIP_NX_CACHE='true', NODE_ENV='development')
+    for key in list(env):
+        if key.startswith('COMPOSE_'):
+            env.pop(key)
+    return env
+
+
+def yarn(w, args):
+    return ['node', str(w.root / '.yarn/releases/yarn-4.13.0.cjs')] + args
+
+
+def task(w, name, args, cwd=None, timeout=1800):
+    print(name, flush=True)
+    return run(args, cwd=cwd or w.root, env=runtime_env(), timeout=timeout,
+               log=w.state_dir / (name + '.log'))
+
+
+def compose_file(w, state):
+    services = {}
+    for role, image, port, path in (('postgres', 'postgres:16', 5432, '/var/lib/postgresql/data'),
+                                    ('redis', 'redis:7', 6379, '/data')):
+        service = dict(image=image, ports=['127.0.0.1:{}:{}'.format(state['ports'][role], port)],
+                       volumes=[role + '-data:' + path], labels={'twenty.worktree': str(w.root)})
+        if role == 'postgres':
+            service.update(environment=dict(POSTGRES_USER='postgres', POSTGRES_DB='default',
+                                            POSTGRES_PASSWORD=state['database_password']),
+                           healthcheck=dict(test=['CMD-SHELL', 'pg_isready -U postgres -d default'],
+                                            interval='2s', timeout='5s', retries=60))
+        else:
+            service.update(command=['redis-server', '--maxmemory-policy', 'noeviction', '--appendonly', 'yes'],
+                           healthcheck=dict(test=['CMD', 'redis-cli', 'ping'], interval='2s', timeout='5s', retries=60))
+        services[role] = service
+    document = dict(services=services, volumes={r + '-data': {'labels': {'twenty.worktree': str(w.root)}}
+                                               for r in ('postgres', 'redis')})
+    atomic(w.state_dir / 'compose.json', json.dumps(document, indent=2) + '\n')
+
+
+def compose(w, args):
+    return run(['docker', 'compose', '-p', w.compose_project, '-f', str(w.state_dir / 'compose.json'),
+                '--project-directory', str(w.state_dir)] + args, env=runtime_env(), timeout=180)
+
+
+def resources(w, kind):
+    command = ['docker', 'ps', '-aq'] if kind == 'container' else ['docker', kind, 'ls', '-q']
+    return run(command + ['--filter', 'label=com.docker.compose.project=' + w.compose_project],
+               env=runtime_env()).split()
+
+
+def owned(w, kind, name):
+    item = json.loads(run(['docker', kind, 'inspect', name], env=runtime_env()))[0]
+    labels = item.get('Labels') or item.get('Config', {}).get('Labels') or {}
+    if labels.get('com.docker.compose.project') != w.compose_project:
+        raise Failure('Resource ownership mismatch: ' + name)
+    if kind != 'network' and labels.get('twenty.worktree') != str(w.root):
+        raise Failure('Worktree ownership mismatch: ' + name)
+    expected = ('postgres', 'redis') if kind == 'container' else ('postgres-data', 'redis-data')
+    if kind != 'network' and labels.get('com.docker.compose.' + ('service' if kind == 'container' else 'volume')) not in expected:
+        raise Failure('Unexpected resource: ' + name)
+    if kind in ('volume', 'network'):
+        suffix = labels.get('com.docker.compose.volume') if kind == 'volume' else 'default'
+        if item.get('Name') != w.compose_project + '_' + suffix:
+            raise Failure('Unexpected resource name: ' + name)
+    return item
+
+
+def validate_resources(w, state):
+    for kind, suffixes in (('volume', ('postgres-data', 'redis-data')), ('network', ('default',))):
+        names = run(['docker', kind, 'ls', '--format', '{{.Name}}'], env=runtime_env()).split()
+        for suffix in suffixes:
+            name = w.compose_project + '_' + suffix
+            if name in names:
+                owned(w, kind, name)
+    for kind in ('container', 'volume', 'network'):
+        for name in resources(w, kind):
+            item = owned(w, kind, name)
+            if kind == 'container':
+                role = item['Config']['Labels']['com.docker.compose.service']
+                port = 5432 if role == 'postgres' else 6379
+                expected = [{'HostIp': '127.0.0.1', 'HostPort': str(state['ports'][role])}]
+                if item['HostConfig']['PortBindings'].get(str(port) + '/tcp') != expected:
+                    raise Failure('Container port ownership mismatch')
+                volumes = [m.get('Name') for m in item['Mounts'] if m['Type'] == 'volume']
+                if volumes != [w.compose_project + '_' + role + '-data']:
+                    raise Failure('Container volume ownership mismatch')
+
+
+def sql(w, query):
+    return compose(w, ['exec', '-T', 'postgres', 'psql', '-U', 'postgres', '-d', 'default',
+                       '-v', 'ON_ERROR_STOP=1', '-Atc', query]).strip()
+
+
+def database_ready(w):
+    if sql(w, "SELECT count(*) FROM core.user WHERE email = 'tim@apple.dev'") != '1':
+        raise Failure('Demo user was not seeded; inspect seeding.log. No data was reset.')
+    if int(sql(w, 'SELECT count(*) FROM core.workspace')) < 1:
+        raise Failure('No seeded workspace found')
+
+
+def dotenv(path, values):
+    original = path.read_text() if path.exists() else path.with_name('.env.example').read_text()
+    lines = [line for line in original.splitlines()
+             if not re.match(r'^\s*(?:export\s+)?(' + '|'.join(re.escape(k) for k in values) + r')\s*=', line)]
+    atomic(path, '\n'.join(lines) + '\n' + ''.join(k + '=' + str(v) + '\n' for k, v in values.items()))
+
+
+def environment(w, state):
+    p = state['ports']
+    server = dict(NODE_ENV='development', PG_DATABASE_URL='postgres://postgres:{}@127.0.0.1:{}/default'.format(state['database_password'], p['postgres']),
+                  REDIS_URL='redis://127.0.0.1:{}'.format(p['redis']),
+                  REDIS_QUEUE_URL='redis://127.0.0.1:{}'.format(p['redis']),
+                  IS_MULTIWORKSPACE_ENABLED='false', APP_SECRET=state['app_secret'],
+                  NODE_PORT=p['api'], FRONTEND_URL='http://localhost:{}'.format(p['front']),
+                  SERVER_URL='http://localhost:{}'.format(p['api']), SIGN_IN_PREFILLED='true',
+                  STORAGE_LOCAL_PATH=str(w.root / 'packages/twenty-server/.local-storage'))
+    dotenv(w.root / 'packages/twenty-server/.env', server)
+    dotenv(w.root / 'packages/twenty-front/.env', dict(REACT_APP_PORT=p['front'], VITE_HOST='127.0.0.1',
+                                                     REACT_APP_SERVER_BASE_URL=server['SERVER_URL']))
+    return server
+
+
+def fingerprint(w, dependencies=False, node_version=None):
+    files = run(['git', 'ls-files', '-co', '--exclude-standard', '-z'], cwd=w.root).split('\0')
+    digest = hashlib.sha256()
+    if node_version is not None:
+        digest.update(node_version.encode())
+    for name in sorted(set(filter(None, files))):
+        if '__pycache__' in Path(name).parts or name.endswith('.pyc'):
+            continue
+        if dependencies and not (name.endswith('package.json') or name in ('yarn.lock', '.yarnrc.yml') or name.startswith('.yarn/')):
+            continue
+        path = w.root / name
+        if path.is_file():
+            digest.update(name.encode())
+            digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def prepare(w, state):
+    mutable_paths = [w.root / name for name in ('node_modules', '.nx')]
+    for package in (w.root / 'packages').iterdir():
+        if package.is_dir():
+            mutable_paths.extend(package / name for name in ('node_modules', 'dist', 'build', '.local-storage'))
+    for path in mutable_paths:
+        if path.exists():
+            try:
+                path.resolve().relative_to(w.root)
+            except ValueError:
+                raise Failure('Writable development state must remain inside this worktree: ' + str(path))
+    env = runtime_env()
+    for executable in ('node', 'npm', 'npx'):
+        if not shutil.which(executable, path=env['PATH']):
+            raise Failure('Full Node 24 distribution with npm and npx is required; missing ' + executable)
+    version = run(['node', '--version'], env=env).strip()
+    if not re.fullmatch(r'v24\.(?:[5-9]|[1-9][0-9]+)\.\d+', version):
+        raise Failure('Node 24.5 or newer within Node 24 is required; found ' + version)
+    dependencies = fingerprint(w, True, version)
+    if state['fingerprints'].get('dependencies') != dependencies or not (w.root / 'node_modules/.yarn-state.yml').exists():
+        task(w, 'install', yarn(w, ['install', '--immutable']), timeout=3600)
+        state['fingerprints']['dependencies'] = dependencies
+        save(w, state)
+    source = fingerprint(w, node_version=version)
+    if state['fingerprints'].get('build') != source or not (w.root / 'packages/twenty-server/dist/main.js').exists():
+        if any(alive(state[r + '_process']) for r in ROLES):
+            stop_apps(w, state)
+        task(w, 'shared-build', yarn(w, ['nx', 'build', 'twenty-shared', '--skip-nx-cache']))
+        task(w, 'server-build', yarn(w, ['nx', 'build', 'twenty-server', '--skip-nx-cache']))
+        front_package = json.loads((w.root / 'packages/twenty-front/package.json').read_text())
+        dependencies = sorted({name for section in ('dependencies', 'devDependencies')
+                               for name, version in front_package.get(section, {}).items()
+                               if version.startswith('workspace:')})
+        task(w, 'front-dependencies', yarn(w, ['nx', 'run-many', '-t', 'build',
+                                              '--projects=' + ','.join(dependencies), '--skip-nx-cache']))
+        state['fingerprints']['build'] = fingerprint(w, node_version=version)
+        save(w, state)
+
+
+def stop_apps(w, state):
+    for role in ('front', 'worker', 'api'):
+        halt(state[role + '_process'])
+        state[role + '_process'] = None
+        save(w, state)
+
+
+def stop(w, state, delete=False):
+    validate_resources(w, state)
+    stop_apps(w, state)
+    for name in resources(w, 'container'):
+        run(['docker', 'stop', '--time', '15', name], env=runtime_env(), timeout=30)
+        if delete:
+            run(['docker', 'rm', name], env=runtime_env())
+    if delete:
+        for kind in ('volume', 'network'):
+            for name in resources(w, kind):
+                owned(w, kind, name)
+                run(['docker', kind, 'rm', name], env=runtime_env())
+
+
+def owns_listener(record, port):
+    if not alive(record):
+        return False
+    sockets = set()
+    for protocol in ('tcp', 'tcp6'):
+        for line in Path('/proc/net/' + protocol).read_text().splitlines()[1:]:
+            fields = line.split()
+            if int(fields[1].split(':')[1], 16) == port and fields[3] == '0A':
+                sockets.add('socket:[' + fields[9] + ']')
+    for member in group_members(record['pid']):
+        try:
+            for fd in (member / 'fd').iterdir():
+                try:
+                    if os.readlink(fd) in sockets:
+                        return True
+                except OSError:
+                    pass
+        except OSError:
+            pass
+    return False
+
+
+def request(port, path, payload=None, headers=None):
+    data = json.dumps(payload).encode() if payload is not None else None
+    req = urllib.request.Request('http://127.0.0.1:{}{}'.format(port, path), data=data,
+                                 headers={'Content-Type': 'application/json', **(headers or {})})
+    with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(req, timeout=10) as response:
+        return response.read().decode()
+
+
+def wait_http(w, state, role, path):
+    deadline = time.monotonic() + 600
+    while time.monotonic() < deadline:
+        if not alive(state[role + '_process']):
+            raise Failure(role + ' process exited; inspect ' + str(w.state_dir / (role + '.log')))
+        try:
+            if owns_listener(state[role + '_process'], state['ports'][role]):
+                body = request(state['ports'][role], path)
+                if (role == 'api' and json.loads(body).get('status') == 'ok') or (role == 'front' and '<html' in body.lower()):
+                    return
+        except (OSError, ValueError):
+            pass
+        time.sleep(1)
+    raise Failure(role + ' readiness timed out')
+
+
+def verify_login(state):
+    port = state['ports']['front']
+    origin = 'http://localhost:' + str(state['ports']['api'])
+    headers = {'Origin': origin}
+    def graphql(query, variables=None):
+        result = json.loads(request(port, '/metadata', {'query': query, 'variables': variables or {}}, headers))
+        if result.get('errors') or not result.get('data'):
+            raise Failure('Demo authentication through frontend proxy failed; inspect API log')
+        return result['data']
+    login = graphql('mutation($email:String!,$password:String!,$origin:String!){getLoginTokenFromCredentials(email:$email,password:$password,origin:$origin){loginToken{token}}}',
+                    {'email': 'tim@apple.dev', 'password': 'tim@apple.dev', 'origin': origin})
+    tokens = graphql('mutation($loginToken:String!,$origin:String!){getAuthTokensFromLoginToken(loginToken:$loginToken,origin:$origin){tokens{accessOrWorkspaceAgnosticToken{token}}}}',
+                     {'loginToken': login['getLoginTokenFromCredentials']['loginToken']['token'], 'origin': origin})
+    headers['Authorization'] = 'Bearer ' + tokens['getAuthTokensFromLoginToken']['tokens']['accessOrWorkspaceAgnosticToken']['token']
+    if graphql('{currentUser{id email}}')['currentUser']['email'] != 'tim@apple.dev':
+        raise Failure('Demo authentication returned an unexpected user')
+
+
+def verify_worker(w, env):
+    script = r'''
+const { Queue, QueueEvents } = require('bullmq');
+const Redis = require('ioredis');
+const { randomUUID } = require('node:crypto');
+(async () => {
+  const workspaceId = randomUUID(), messageChannelId = randomUUID();
+  const key = `module:messaging:messages-to-import:${workspaceId}:${messageChannelId}`;
+  const cache = new Redis(process.env.REDIS_URL);
+  const connection = new Redis(process.env.REDIS_QUEUE_URL, {maxRetriesPerRequest:null});
+  const queue = new Queue('messaging-queue', {connection});
+  const events = new QueueEvents('messaging-queue', {connection});
+  let job;
+  try {
+    await events.waitUntilReady();
+    await cache.set(key, JSON.stringify('owned readiness marker'), 'EX', 300);
+    job = await queue.add('MessagingCleanCacheJob', {workspaceId,messageChannelId},
+      {jobId:`twenty-dev-${randomUUID()}`,attempts:1,removeOnComplete:false,removeOnFail:false});
+    await job.waitUntilFinished(events, 90000);
+    if (await job.getState() !== 'completed' || await cache.exists(key) !== 0)
+      throw Error('Worker handler did not remove its cache marker');
+    console.log('Existing MessagingCleanCacheJob completed and removed its owned marker');
+  } finally {
+    await cache.del(key);
+    if (job && await job.getState() !== 'active') await job.remove();
+    await events.close(); await queue.close(); await connection.quit(); await cache.quit();
+  }
+})().catch(error => { console.error(error.message); process.exitCode = 1; });
+'''
+    print('worker queue verification', flush=True)
+    run(['node', '-e', script], cwd=w.root, env=env, timeout=120, log=w.state_dir / 'worker-probe.log')
+
+
+def start(w, state):
+    validate_resources(w, state)
+    compose_file(w, state)
+    server_env = environment(w, state)
+    prepare(w, state)
+    compose(w, ['up', '-d', '--wait', '--wait-timeout', '120'])
+    if compose(w, ['exec', '-T', 'redis', 'redis-cli', 'ping']).strip() != 'PONG':
+        raise Failure('Redis did not return PONG')
+    if state['phase'] == 'fresh':
+        if sql(w, "SELECT count(*) FROM information_schema.tables WHERE table_schema='core'") != '0':
+            raise Failure('Fresh manifest found an existing core schema; refusing bootstrap')
+        state['phase'] = 'initializing'
+        save(w, state)
+        task(w, 'initializing', yarn(w, ['nx', 'database:init', 'twenty-server', '--skip-nx-cache']))
+        state['phase'] = 'seeding'
+        save(w, state)
+        task(w, 'seeding', yarn(w, ['nx', 'command-no-deps', 'twenty-server', '--', 'workspace:seed:dev', '--light']))
+        database_ready(w)
+        state['phase'] = 'ready'
+        state['fingerprints']['migrated'] = fingerprint(w)
+        save(w, state)
+    elif state['phase'] != 'ready':
+        raise Failure('Interrupted database ' + state['phase'] + '; inspect logs and repair explicitly or run reset. No implicit reset.')
+    source = fingerprint(w)
+    if state['fingerprints'].get('migrated') != source:
+        stop_apps(w, state)
+        task(w, 'migrate', yarn(w, ['nx', 'database:migrate', 'twenty-server', '--', '--include-slow']))
+        state['fingerprints']['migrated'] = fingerprint(w)
+        save(w, state)
+    database_ready(w)
+    env = runtime_env()
+    env.update({key: str(value) for key, value in server_env.items()})
+    if not alive(state['api_process']):
+        if not available(state['ports']['api']):
+            raise Failure('API port occupied; stop this environment and use start --reallocate-ports')
+        launch(w, state, 'api', yarn(w, ['nx', 'start', 'twenty-server', '--excludeTaskDependencies']), w.root, env)
+    wait_http(w, state, 'api', '/healthz')
+    if not alive(state['worker_process']):
+        launch(w, state, 'worker', ['node', '--watch', 'dist/queue-worker/queue-worker.js'],
+               w.root / 'packages/twenty-server', env)
+    if not alive(state['front_process']):
+        if not available(state['ports']['front']):
+            raise Failure('Frontend port occupied; stop this environment and use start --reallocate-ports')
+        launch(w, state, 'front', yarn(w, ['nx', 'start', 'twenty-front', '--excludeTaskDependencies']), w.root, runtime_env())
+    wait_http(w, state, 'front', '/')
+    verify_login(state)
+    verify_worker(w, env)
+    time.sleep(3)
+    worker_log = (w.state_dir / 'worker.log').read_text(errors='replace')
+    if any(message in worker_log for message in ('Waiting for file changes before restarting', 'Failed running')):
+        raise Failure('Worker watch child failed; inspect worker.log')
+    if not alive(state['worker_process']):
+        raise Failure('Worker exited; inspect worker.log')
+    print('API liveness, SQL/demo workspace, Redis, frontend and demo login passed. Worker processed the existing cache cleanup job and removed its marker.')
+
+
+def report(w, state):
+    print('Worktree ' + str(w.root))
+    print('Environment ' + w.compose_project)
+    if state is None:
+        print('No environment state')
+        return
+    print('Database phase ' + state['phase'])
+    try:
+        validate_resources(w, state)
+        print('PostgreSQL ' + ('ready' if sql(w, 'SELECT 1') == '1' else 'unhealthy'))
+        print('Redis ' + ('ready' if compose(w, ['exec', '-T', 'redis', 'redis-cli', 'ping']).strip() == 'PONG' else 'unhealthy'))
+    except Failure as error:
+        print('Infrastructure stopped or unhealthy: ' + redact(str(error)).splitlines()[0])
+    for role, route in (('api', '/healthz'), ('front', '/')):
+        try:
+            body = request(state['ports'][role], route)
+            healthy = owns_listener(state[role + '_process'], state['ports'][role]) and (json.loads(body).get('status') == 'ok' if role == 'api' else '<html' in body.lower())
+        except (OSError, ValueError):
+            healthy = False
+        print(role + ' HTTP ' + ('ready' if healthy else 'not ready'))
+    for role in ROLES:
+        print(role + ' ' + ('running' if alive(state[role + '_process']) else 'stopped'))
+    for name, port in state['ports'].items():
+        print('{} port {}'.format(name, port))
+    print('Frontend http://localhost:' + str(state['ports']['front']))
+    print('Logs ' + str(w.state_dir))
+
+
+def operate(w, args):
+    w.state_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(w.state_dir, 0o700)
+    with (w.state_dir / 'lock').open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise Failure('Another action owns this worktree lock; wait for it to finish')
+        state = load(w)
+        if args.command == 'status':
+            report(w, state)
+            return
+        if state is None:
+            if args.command in ('stop', 'reset', 'remove', 'migrate'):
+                raise Failure('No environment state; run setup first')
+            state = reserve_ports(w)
+        try:
+            if args.command in ('stop', 'reset', 'remove'):
+                print('Target ' + w.compose_project, flush=True)
+                stop(w, state, delete=args.command != 'stop')
+                if args.command == 'remove':
+                    for path in w.state_dir.iterdir():
+                        if path.name != 'lock':
+                            path.unlink()
+                    print('Environment removed; checkout and dependencies retained')
+                    return
+                if args.command == 'stop':
+                    report(w, state)
+                    return
+                state['phase'] = 'fresh'
+                save(w, state)
+            if args.reallocate_ports:
+                if any(alive(state[r + '_process']) for r in ROLES):
+                    raise Failure('Port reallocation requires stop first')
+                validate_resources(w, state)
+                for name in resources(w, 'container'):
+                    item = owned(w, 'container', name)
+                    if item.get('State', {}).get('Running'):
+                        raise Failure('Port reallocation requires stop first')
+                for name in resources(w, 'container'):
+                    run(['docker', 'rm', name], env=runtime_env())
+                state = reserve_ports(w, state)
+            if args.command in ('setup', 'start', 'reset'):
+                start(w, state)
+            elif args.command == 'migrate':
+                validate_resources(w, state)
+                if state['phase'] != 'ready':
+                    raise Failure('Database bootstrap is incomplete')
+                stop_apps(w, state)
+                environment(w, state)
+                prepare(w, state)
+                compose(w, ['up', '-d', '--wait'])
+                task(w, 'migrate', yarn(w, ['nx', 'database:migrate', 'twenty-server', '--', '--include-slow']))
+                database_ready(w)
+                state['fingerprints']['migrated'] = fingerprint(w)
+                save(w, state)
+                start(w, state)
+            else:
+                was_running = any(alive(state[r + '_process']) for r in ROLES)
+                try:
+                    prepare(w, state)
+                    if args.command == 'check':
+                        if args.scope == 'shared':
+                            task(w, 'shared-build', yarn(w, ['nx', 'build', 'twenty-shared', '--skip-nx-cache']))
+                        else:
+                            task(w, args.scope + '-types', [str(w.root / 'node_modules/.bin/tsgo'), '-p', 'tsconfig.json', '--noEmit'],
+                                 cwd=w.root / ('packages/twenty-' + args.scope))
+                    elif args.command == 'test':
+                        if not args.files or any(name.startswith('-') for name in args.files):
+                            raise Failure('Focused test requires explicit test file paths')
+                        if args.scope == 'ui':
+                            command = [str(w.root / 'node_modules/.bin/vitest'), 'run', '--root',
+                                       'packages/twenty-ui', '--project', 'unit'] + args.files
+                        else:
+                            command = [str(w.root / 'node_modules/.bin/jest'),
+                                       '--config=packages/twenty-' + args.scope + '/jest.config.mjs',
+                                       '--runInBand', '--runTestsByPath'] + args.files
+                        task(w, 'test-' + args.scope, command)
+                finally:
+                    if was_running and not all(alive(state[r + '_process']) for r in ROLES):
+                        print('Restoring the previously running development stack', flush=True)
+                        start(w, state)
+            report(w, state)
+        except (Failure, OSError):
+            for role in ROLES:
+                path = w.state_dir / (role + '.log')
+                if path.exists():
+                    print('Recent ' + role + ' log\n' + '\n'.join(redact(path.read_text(errors='replace')).splitlines()[-12:]), file=sys.stderr)
+            raise
+
+
+def main():
+    if len(sys.argv) > 1 and sys.argv[1] == '--supervise':
+        return supervise(sys.argv[2:])
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--install', action='store_true')
+    parser.add_argument('--reallocate-ports', action='store_true')
+    parser.add_argument('command', nargs='?', choices=('setup', 'start', 'status', 'stop', 'migrate', 'reset', 'remove', 'check', 'test'))
+    parser.add_argument('scope', nargs='?', choices=('front', 'server', 'shared', 'ui'))
+    parser.add_argument('files', nargs='*')
+    args = parser.parse_args()
+    if args.install:
+        target = Path.home() / '.local/bin/twenty-dev'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        atomic(target, Path(__file__).read_text(), 0o755)
+        print('Installed ' + str(target))
+        return 0
+    if not args.command:
+        parser.error('a command or --install is required')
+    if args.command in ('check', 'test') and (args.scope is None or (args.command == 'check' and args.scope == 'ui') or (args.command == 'test' and args.scope == 'shared')):
+        parser.error('check requires front/server/shared; test requires front/server/ui')
+    if not sys.platform.startswith('linux'):
+        raise Failure('Lifecycle commands require Linux /proc and Docker Compose')
+    operate(locate(), args)
+    return 0
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except (Failure, OSError) as error:
+        print('twenty-dev: ' + redact(str(error)), file=sys.stderr)
+        sys.exit(1)
