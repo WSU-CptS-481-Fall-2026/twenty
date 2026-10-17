@@ -7,7 +7,9 @@ import { useSetAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useSe
 import { useAtomFamilySelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomFamilySelectorValue';
 import { hasInitializedCurrentRecordFilterGroupsComponentFamilyState } from '@/views/states/hasInitializedCurrentRecordFilterGroupsComponentFamilyState';
 import { viewFromViewIdFamilySelector } from '@/views/states/selectors/viewFromViewIdFamilySelector';
+import { unsavedViewFiltersByViewIdState } from '@/views/states/unsavedViewFiltersByViewIdState';
 import { mapViewFilterGroupsToRecordFilterGroups } from '@/views/utils/mapViewFilterGroupsToRecordFilterGroups';
+import { useStore } from 'jotai';
 import { useEffect } from 'react';
 import { isDefined } from 'twenty-shared/utils';
 
@@ -37,6 +39,8 @@ export const ViewBarRecordFilterGroupEffect = () => {
     recordIndexId,
   );
 
+  const store = useStore();
+
   useEffect(() => {
     if (isDefined(currentView) && !hasInitializedCurrentRecordFilterGroups) {
       if (currentView.objectMetadataId !== objectMetadataItem.id) {
@@ -45,9 +49,11 @@ export const ViewBarRecordFilterGroupEffect = () => {
 
       if (isDefined(currentView)) {
         setCurrentRecordFilterGroups(
-          mapViewFilterGroupsToRecordFilterGroups(
-            currentView.viewFilterGroups ?? [],
-          ),
+          store.get(unsavedViewFiltersByViewIdState.atom)[currentView.id]
+            ?.recordFilterGroups ??
+            mapViewFilterGroupsToRecordFilterGroups(
+              currentView.viewFilterGroups ?? [],
+            ),
         );
 
         setHasInitializedCurrentRecordFilterGroups(true);
@@ -60,6 +66,7 @@ export const ViewBarRecordFilterGroupEffect = () => {
     setHasInitializedCurrentRecordFilterGroups,
     objectMetadataItem,
     currentView,
+    store,
   ]);
 
   return null;

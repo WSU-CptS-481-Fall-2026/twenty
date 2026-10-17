@@ -36,6 +36,7 @@ import { useAtomComponentStateCallbackState } from '@/ui/utilities/state/jotai/h
 import { hasInitializedCurrentRecordFieldsComponentFamilyState } from '@/views/states/hasInitializedCurrentRecordFieldsComponentFamilyState';
 import { hasInitializedCurrentRecordFiltersComponentFamilyState } from '@/views/states/hasInitializedCurrentRecordFiltersComponentFamilyState';
 import { hasInitializedCurrentRecordSortsComponentFamilyState } from '@/views/states/hasInitializedCurrentRecordSortsComponentFamilyState';
+import { unsavedViewFiltersByViewIdState } from '@/views/states/unsavedViewFiltersByViewIdState';
 import { type View } from '@/views/types/View';
 import { mapViewFieldToRecordField } from '@/views/utils/mapViewFieldToRecordField';
 import { mapViewFieldsToColumnDefinitions } from '@/views/utils/mapViewFieldsToColumnDefinitions';
@@ -231,19 +232,21 @@ export const useLoadRecordIndexStates = () => {
       const flattenedFieldMetadataItems = store.get(
         flattenedFieldMetadataItemsSelector.atom,
       );
-      const recordFilters = mapViewFiltersToFilters(
-        view.viewFilters,
-        flattenedFieldMetadataItems,
-      );
+      const unsavedViewFilters = isDefined(options?.recordIndexId)
+        ? undefined
+        : store.get(unsavedViewFiltersByViewIdState.atom)[view.id];
 
-      const recordFilterGroups = mapViewFilterGroupsToRecordFilterGroups(
-        view.viewFilterGroups ?? [],
-      );
+      const recordFilters =
+        unsavedViewFilters?.recordFilters ??
+        mapViewFiltersToFilters(view.viewFilters, flattenedFieldMetadataItems);
 
-      const contextStoreFilters = mapViewFiltersToFilters(
-        view.viewFilters,
-        flattenedFieldMetadataItems,
-      );
+      const recordFilterGroups =
+        unsavedViewFilters?.recordFilterGroups ??
+        mapViewFilterGroupsToRecordFilterGroups(view.viewFilterGroups ?? []);
+
+      const contextStoreFilters =
+        unsavedViewFilters?.recordFilters ??
+        mapViewFiltersToFilters(view.viewFilters, flattenedFieldMetadataItems);
 
       let recordIndexGroupFieldMetadataItemValue = undefined;
       if (isDefined(view.mainGroupByFieldMetadataId)) {

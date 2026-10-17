@@ -8,6 +8,8 @@ import { useAtomFamilySelectorValue } from '@/ui/utilities/state/jotai/hooks/use
 import { useMapViewFiltersToFilters } from '@/views/hooks/useMapViewFiltersToFilters';
 import { hasInitializedCurrentRecordFiltersComponentFamilyState } from '@/views/states/hasInitializedCurrentRecordFiltersComponentFamilyState';
 import { viewFromViewIdFamilySelector } from '@/views/states/selectors/viewFromViewIdFamilySelector';
+import { unsavedViewFiltersByViewIdState } from '@/views/states/unsavedViewFiltersByViewIdState';
+import { useStore } from 'jotai';
 import { useEffect } from 'react';
 import { isDefined } from 'twenty-shared/utils';
 
@@ -37,6 +39,8 @@ export const ViewBarRecordFilterEffect = () => {
     recordIndexId,
   );
 
+  const store = useStore();
+
   const { mapViewFiltersToRecordFilters } = useMapViewFiltersToFilters();
 
   useEffect(() => {
@@ -46,7 +50,9 @@ export const ViewBarRecordFilterEffect = () => {
       }
 
       setCurrentRecordFilters(
-        mapViewFiltersToRecordFilters(currentView.viewFilters),
+        store.get(unsavedViewFiltersByViewIdState.atom)[currentView.id]
+          ?.recordFilters ??
+          mapViewFiltersToRecordFilters(currentView.viewFilters),
       );
 
       setHasInitializedCurrentRecordFilters(true);
@@ -59,6 +65,7 @@ export const ViewBarRecordFilterEffect = () => {
     setHasInitializedCurrentRecordFilters,
     currentView,
     objectMetadataItem,
+    store,
   ]);
 
   return null;
