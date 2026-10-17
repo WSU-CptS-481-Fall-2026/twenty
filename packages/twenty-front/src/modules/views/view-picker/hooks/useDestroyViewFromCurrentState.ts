@@ -9,6 +9,7 @@ import { usePerformViewApiPersist } from '@/views/hooks/internal/usePerformViewA
 import { useChangeView } from '@/views/hooks/useChangeView';
 import { useGetCurrentViewOnly } from '@/views/hooks/useGetCurrentViewOnly';
 import { viewsFromObjectMetadataItemFamilySelector } from '@/views/states/selectors/viewsFromObjectMetadataItemFamilySelector';
+import { unsavedViewFiltersByViewIdState } from '@/views/states/unsavedViewFiltersByViewIdState';
 import { useCloseAndResetViewPicker } from '@/views/view-picker/hooks/useCloseAndResetViewPicker';
 import { viewPickerIsDirtyComponentState } from '@/views/view-picker/states/viewPickerIsDirtyComponentState';
 import { viewPickerIsPersistingComponentState } from '@/views/view-picker/states/viewPickerIsPersistingComponentState';
@@ -74,8 +75,22 @@ export const useDestroyViewFromCurrentState = (viewBarInstanceId?: string) => {
       changeView(remainingViews[0].id);
     }
 
-    await performViewApiDestroy({ id: viewPickerReferenceViewId });
+    const destroyViewResult = await performViewApiDestroy({
+      id: viewPickerReferenceViewId,
+    });
     removeNavigationMenuItemsByViewIds([viewPickerReferenceViewId]);
+
+    if (destroyViewResult.status === 'failed') {
+      return;
+    }
+
+    store.set(
+      unsavedViewFiltersByViewIdState.atom,
+      ({
+        [viewPickerReferenceViewId]: _destroyedViewFilters,
+        ...remainingUnsavedViewFilters
+      }) => remainingUnsavedViewFilters,
+    );
   }, [
     currentView,
     closeAndResetViewPicker,

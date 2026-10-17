@@ -1,6 +1,10 @@
+import { contextStoreCurrentViewIdComponentState } from '@/context-store/states/contextStoreCurrentViewIdComponentState';
 import { useAtomComponentStateCallbackState } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateCallbackState';
+import { useApplyCurrentViewFilterGroupsToCurrentRecordFilterGroups } from '@/views/hooks/useApplyCurrentViewFilterGroupsToCurrentRecordFilterGroups';
+import { useApplyCurrentViewFiltersToCurrentRecordFilters } from '@/views/hooks/useApplyCurrentViewFiltersToCurrentRecordFilters';
 import { useChangeView } from '@/views/hooks/useChangeView';
 import { useCreateViewFromCurrentView } from '@/views/hooks/useCreateViewFromCurrentView';
+import { unsavedViewFiltersByViewIdState } from '@/views/states/unsavedViewFiltersByViewIdState';
 import { ViewType } from '@/views/types/ViewType';
 import { useCloseAndResetViewPicker } from '@/views/view-picker/hooks/useCloseAndResetViewPicker';
 import { viewPickerCalendarFieldMetadataIdComponentState } from '@/views/view-picker/states/viewPickerCalendarFieldMetadataIdComponentState';
@@ -55,8 +59,18 @@ export const useCreateViewFromCurrentState = () => {
     viewPickerVisibilityComponentState,
   );
 
+  const currentViewIdCallbackState = useAtomComponentStateCallbackState(
+    contextStoreCurrentViewIdComponentState,
+  );
+
   const { createViewFromCurrentView } = useCreateViewFromCurrentView();
   const { changeView } = useChangeView();
+
+  const { applyCurrentViewFiltersToCurrentRecordFilters } =
+    useApplyCurrentViewFiltersToCurrentRecordFilters();
+
+  const { applyCurrentViewFilterGroupsToCurrentRecordFilterGroups } =
+    useApplyCurrentViewFilterGroupsToCurrentRecordFilterGroups();
 
   const store = useStore();
 
@@ -73,6 +87,7 @@ export const useCreateViewFromCurrentState = () => {
 
     const viewPickerMode = store.get(viewPickerModeCallbackState);
     const visibility = store.get(viewPickerVisibilityCallbackState);
+    const sourceViewId = store.get(currentViewIdCallbackState);
 
     const shouldCopyFiltersAndSortsAndAggregate =
       viewPickerMode === 'create-from-current';
@@ -95,11 +110,27 @@ export const useCreateViewFromCurrentState = () => {
     );
 
     if (isDefined(createdViewId)) {
+      if (shouldCopyFiltersAndSortsAndAggregate && isDefined(sourceViewId)) {
+        applyCurrentViewFiltersToCurrentRecordFilters();
+        applyCurrentViewFilterGroupsToCurrentRecordFilterGroups();
+
+        store.set(
+          unsavedViewFiltersByViewIdState.atom,
+          ({
+            [sourceViewId]: _savedToNewViewFilters,
+            ...remainingUnsavedViewFilters
+          }) => remainingUnsavedViewFilters,
+        );
+      }
+
       closeAndResetViewPicker();
       changeView(createdViewId);
     }
   }, [
     store,
+    currentViewIdCallbackState,
+    applyCurrentViewFiltersToCurrentRecordFilters,
+    applyCurrentViewFilterGroupsToCurrentRecordFilterGroups,
     closeAndResetViewPicker,
     createViewFromCurrentView,
     changeView,
