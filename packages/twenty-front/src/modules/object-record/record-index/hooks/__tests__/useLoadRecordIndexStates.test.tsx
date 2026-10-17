@@ -2,14 +2,20 @@ import { renderHook } from '@testing-library/react';
 
 import { useLoadRecordIndexStates } from '@/object-record/record-index/hooks/useLoadRecordIndexStates';
 import { anyFieldFilterValueComponentState } from '@/object-record/record-filter/states/anyFieldFilterValueComponentState';
+import { currentRecordFiltersComponentState } from '@/object-record/record-filter/states/currentRecordFiltersComponentState';
+import { type RecordFilter } from '@/object-record/record-filter/types/RecordFilter';
 import { jotaiStore } from '@/ui/utilities/state/jotai/jotaiStore';
+import { unsavedViewFiltersByViewIdState } from '@/views/states/unsavedViewFiltersByViewIdState';
 import { type View } from '@/views/types/View';
 import { act } from 'react';
+import { ViewFilterOperand } from 'twenty-shared/types';
+import { getFilterTypeFromFieldType } from 'twenty-shared/utils';
 import { ViewType, ViewVisibility } from '~/generated-metadata/graphql';
 import { getJestMetadataAndApolloMocksWrapper } from '~/testing/jest/getJestMetadataAndApolloMocksWrapper';
 import { getMockObjectMetadataItemOrThrow } from '~/testing/utils/getMockObjectMetadataItemOrThrow';
 
 const recordIndexId = 'record-table-widget-record-index-id';
+const ambientViewInstanceId = 'instanceId';
 const objectMetadataItem = getMockObjectMetadataItemOrThrow('company');
 
 const makeView = (anyFieldFilterValue: string | null): View => ({
@@ -80,5 +86,83 @@ describe('useLoadRecordIndexStates', () => {
     });
 
     expect(jotaiStore.get(anyFieldFilterValueAtom)).toBe('');
+  });
+
+  describe('with unsaved filters for the view', () => {
+    const nameFieldMetadataItem = objectMetadataItem.fields.find(
+      (fieldMetadataItem) => fieldMetadataItem.name === 'name',
+    )!;
+
+    const unsavedRecordFilter: RecordFilter = {
+      id: 'unsaved-filter-id',
+      fieldMetadataId: nameFieldMetadataItem.id,
+      value: 'Acme',
+      displayValue: 'Acme',
+      operand: ViewFilterOperand.CONTAINS,
+      label: nameFieldMetadataItem.label,
+      type: getFilterTypeFromFieldType(nameFieldMetadataItem.type),
+    };
+
+    const renderWithUnsavedViewFilters = () => {
+      const renderResult = renderUseLoadRecordIndexStates();
+
+      act(() => {
+        jotaiStore.set(unsavedViewFiltersByViewIdState.atom, {
+          'view-id': {
+            recordFilters: [unsavedRecordFilter],
+            recordFilterGroups: [],
+          },
+        });
+      });
+
+      return renderResult;
+    };
+
+    afterEach(() => {
+      jotaiStore.set(unsavedViewFiltersByViewIdState.atom, {});
+      sessionStorage.clear();
+    });
+
+    it('restores them instead of the saved view filters', () => {
+      const { result } = renderWithUnsavedViewFilters();
+
+      act(() => {
+        result.current.loadRecordIndexStates(
+          makeView(null),
+          objectMetadataItem,
+        );
+      });
+
+      expect(
+        jotaiStore.get(
+          currentRecordFiltersComponentState.atomFamily({
+            instanceId: ambientViewInstanceId,
+          }),
+        ),
+      ).toEqual([unsavedRecordFilter]);
+    });
+
+    it('ignores them when loading an embedded view with its own record index id', () => {
+      const { result } = renderWithUnsavedViewFilters();
+
+      act(() => {
+        result.current.loadRecordIndexStates(
+          makeView(null),
+          objectMetadataItem,
+          {
+            skipGlobalIndexStates: true,
+            recordIndexId,
+          },
+        );
+      });
+
+      expect(
+        jotaiStore.get(
+          currentRecordFiltersComponentState.atomFamily({
+            instanceId: recordIndexId,
+          }),
+        ),
+      ).toEqual([]);
+    });
   });
 });
