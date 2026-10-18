@@ -1,18 +1,19 @@
 import { styled } from '@linaria/react';
 
+import { SettingsPageLayout } from '@/settings/components/layout/SettingsPageLayout';
 import { SettingsPageContainer } from '@/settings/components/SettingsPageContainer';
 import { FormatPreferencesSettings } from '@/settings/experience/components/FormatPreferencesSettings';
-import { UiScalePicker } from '@/settings/experience/components/UiScalePicker';
 import { OpenRecordInPreferencePicker } from '@/settings/experience/components/OpenRecordInPreferencePicker';
-import { SettingsPageLayout } from '@/settings/components/layout/SettingsPageLayout';
+import { UiScalePicker } from '@/settings/experience/components/UiScalePicker';
 import { useColorScheme } from '@/ui/theme/hooks/useColorScheme';
 import { Trans, useLingui } from '@lingui/react/macro';
+import { SidePanelWidthSetting } from 'twenty-front/src/modules/settings/experience/components/SidePanelWidthSetting';
 import { SettingsPath } from 'twenty-shared/types';
 import { getSettingsPath } from 'twenty-shared/utils';
-import { H2Title } from 'twenty-ui/typography';
 import { ColorSchemePicker } from 'twenty-ui/input';
 import { Section } from 'twenty-ui/layout';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { H2Title } from 'twenty-ui/typography';
 import { LocalePicker } from '~/pages/settings/profile/appearance/components/LocalePicker';
 
 const StyledInterfaceControls = styled.div`
@@ -75,6 +76,14 @@ export const SettingsExperience = () => {
           <FormatPreferencesSettings />
         </Section>
         {/* Unified into FormatPreferencesSettings */}
+
+        <Section>
+          <H2Title
+            title={t`Side Panel Size`}
+            description={t`Change the side of the side panel for different sized people`}
+          />
+          <SidePanelWidthSetting />
+        </Section>
       </SettingsPageContainer>
     </SettingsPageLayout>
   );

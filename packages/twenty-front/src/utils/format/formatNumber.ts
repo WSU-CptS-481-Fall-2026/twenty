@@ -58,7 +58,7 @@ export const formatNumber = (
   const locale = getLocaleForFormat(options.format);
 
   if (options.abbreviate) {
-    const abs = Math.abs(value);
+    let abs = Math.abs(value);
     let suffix = '';
     let divisor = 1;
 
@@ -75,10 +75,28 @@ export const formatNumber = (
 
     if (divisor !== 1) {
       const base = value / divisor;
-      const formatted = base.toLocaleString(locale, {
+      let formatted = base.toLocaleString(locale, {
         minimumFractionDigits: 0,
         maximumFractionDigits: options.decimals,
       });
+
+      if (value.toString()[0] != formatted[0]) {
+        abs = abs * 1000;
+        let format2 = formatted[0].toString();
+        formatted = format2;
+      }
+
+      if (abs >= 1e9) {
+        suffix = 'B';
+        divisor = 1e9;
+      } else if (abs >= 1e6) {
+        suffix = 'M';
+        divisor = 1e6;
+      } else if (abs >= 1e3) {
+        suffix = 'k';
+        divisor = 1e3;
+      }
+
       return formatted + suffix;
     }
   }

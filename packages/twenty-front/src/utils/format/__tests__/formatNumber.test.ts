@@ -1,5 +1,5 @@
-import { formatNumber } from '~/utils/format/formatNumber';
 import { NumberFormat } from '@/localization/constants/NumberFormat';
+import { formatNumber } from '~/utils/format/formatNumber';
 
 describe('formatNumber', () => {
   describe('with Infinity', () => {
@@ -120,6 +120,33 @@ describe('formatNumber', () => {
       expect(formatNumber(-1500, { abbreviate: true, decimals: 1 })).toEqual(
         '-1.5k',
       );
+    });
+
+    //RJW TESTS
+    it('should round and give correct abbreviation', () => {
+      expect(
+        formatNumber(999999, {
+          abbreviate: true,
+          decimals: 1,
+        }),
+      ).toEqual('1M');
+    });
+
+    it('should round and give correct abbreviation2', () => {
+      expect(
+        formatNumber(999500, {
+          abbreviate: true,
+        }),
+      ).toEqual('1M');
+    });
+
+    it('should round and give correct abbreviation3', () => {
+      expect(
+        formatNumber(999999999, {
+          abbreviate: true,
+          decimals: 1,
+        }),
+      ).toEqual('1B');
     });
   });
 });

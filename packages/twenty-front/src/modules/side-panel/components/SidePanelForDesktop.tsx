@@ -8,6 +8,7 @@ import { useSidePanelCloseAnimationCompleteCleanup } from '@/side-panel/hooks/us
 import { useSidePanelMenu } from '@/side-panel/hooks/useSidePanelMenu';
 import { isSidePanelClosingState } from '@/side-panel/states/isSidePanelClosingState';
 import { isSidePanelOpenedState } from '@/side-panel/states/isSidePanelOpenedState';
+import { sidePanelMaxWidthState } from '@/side-panel/states/SidePanelMaxWidthState';
 import {
   SIDE_PANEL_WIDTH_VAR,
   sidePanelWidthState,
@@ -21,7 +22,7 @@ import { useSetAtomState } from '@/ui/utilities/state/jotai/hooks/useSetAtomStat
 import { styled } from '@linaria/react';
 import { useReducedMotion } from 'framer-motion';
 import { useStore } from 'jotai';
-import { type AnimationEvent, useCallback, useState } from 'react';
+import { type AnimationEvent, useCallback, useMemo, useState } from 'react';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 const StyledSidePanelWrapper = styled.div<{
@@ -76,6 +77,12 @@ export const SidePanelForDesktop = () => {
   const store = useStore();
   const isSidePanelOpened = useAtomStateValue(isSidePanelOpenedState);
   const [sidePanelWidth, setSidePanelWidth] = useAtomState(sidePanelWidthState);
+  const sidePanelMaxWidth = useAtomStateValue(sidePanelMaxWidthState);
+
+  const sidePanelConstraints = useMemo(
+    () => ({ ...SIDE_PANEL_CONSTRAINTS, max: sidePanelMaxWidth }),
+    [sidePanelMaxWidth],
+  );
   const { closeSidePanelMenu } = useSidePanelMenu();
   const { sidePanelCloseAnimationCompleteCleanup } =
     useSidePanelCloseAnimationCompleteCleanup();
@@ -164,7 +171,7 @@ export const SidePanelForDesktop = () => {
       />
       <ResizablePanelGap
         side="left"
-        constraints={SIDE_PANEL_CONSTRAINTS}
+        constraints={sidePanelConstraints} // was constraints={SIDE_PANEL_CONSTRAINTS}
         currentWidth={sidePanelWidth}
         onWidthChange={handleWidthChange}
         onCollapse={handleCollapse}
