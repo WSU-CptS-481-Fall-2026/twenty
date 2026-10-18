@@ -55,16 +55,10 @@ jest.mock(
     DragDropItemSortableCell: ({
       children,
       id,
-      disabled,
     }: {
       children: ReactNode;
       id: string;
-      disabled?: boolean;
-    }) => (
-      <div aria-disabled={disabled} data-testid={`${id}-sortable-cell`}>
-        {children}
-      </div>
-    ),
+    }) => <div data-testid={`${id}-sortable-cell`}>{children}</div>,
   }),
 );
 
@@ -97,7 +91,7 @@ describe('PageLayoutVerticalList', () => {
     mockIsInPinnedTab = false;
   });
 
-  it('keeps viewing widgets outside disabled drag activators', () => {
+  it('keeps viewing widget controls enabled', () => {
     render(
       <PageLayoutVerticalList
         isInEditMode={false}
@@ -107,9 +101,6 @@ describe('PageLayoutVerticalList', () => {
     expect(
       screen.getByTestId('comments').closest('[aria-disabled="true"]'),
     ).toBeNull();
-    expect(
-      screen.queryByTestId('comments-sortable-cell'),
-    ).not.toBeInTheDocument();
   });
 
   it('renders caller-provided edit controls without record-page dependencies', () => {

@@ -31,7 +31,7 @@ describe('DragDropItemSortableCell', () => {
     renderSortableCell({ disabled: true });
 
     await waitFor(() => {
-      expect(getSortableRoot()).toHaveAttribute('aria-disabled', 'true');
+      expect(getSortableRoot()).not.toHaveAttribute('aria-disabled', 'true');
     });
 
     expect(
@@ -54,7 +54,7 @@ describe('DragDropItemSortableCell', () => {
     const { rerender } = renderSortableCell({ disabled: true });
 
     await waitFor(() => {
-      expect(getSortableRoot()).toHaveAttribute('aria-disabled', 'true');
+      expect(getSortableRoot()).not.toHaveAttribute('aria-disabled', 'true');
     });
 
     rerender(

@@ -83,32 +83,30 @@ export const PageLayoutVerticalListWidgetSlot = ({
       isInEditMode={isInEditMode}
       shouldShowDivider={shouldShowDivider}
     >
-      {isInEditMode ? (
-        <>
-          <DragDropItemDropTarget
-            index={index}
-            droppableId={tabId}
-            orientation="horizontal"
-            compact
-          />
-          <DragDropItemSortableCell
-            id={widget.id}
-            index={index}
-            group={tabId}
-            data={widgetDragData}
-            type={PAGE_LAYOUT_WIDGET_DND_TYPE}
-            accept={canAcceptWidgetDrag}
-            hasTransition={false}
-            highlightWhileDragging
-            orientation="horizontal"
-            fill={fillsViewport}
-          >
-            <WidgetRenderer widget={widget} />
-          </DragDropItemSortableCell>
-        </>
-      ) : (
-        <WidgetRenderer widget={widget} />
+      {isInEditMode && (
+        <DragDropItemDropTarget
+          index={index}
+          droppableId={tabId}
+          orientation="horizontal"
+          compact
+        />
       )}
+      <DragDropItemSortableCell
+        id={widget.id}
+        index={index}
+        group={tabId}
+        data={widgetDragData}
+        type={PAGE_LAYOUT_WIDGET_DND_TYPE}
+        accept={canAcceptWidgetDrag}
+        allowNativeDragWhenDisabled
+        disabled={!isInEditMode}
+        hasTransition={false}
+        highlightWhileDragging={isInEditMode}
+        orientation="horizontal"
+        fill={fillsViewport}
+      >
+        <WidgetRenderer widget={widget} />
+      </DragDropItemSortableCell>
     </StyledWidgetSlot>
   );
 };

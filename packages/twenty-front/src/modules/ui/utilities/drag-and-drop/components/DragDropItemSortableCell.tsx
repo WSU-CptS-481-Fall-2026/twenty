@@ -124,7 +124,7 @@ export const DragDropItemSortableCell = ({
   return (
     <DragDropItemSortableHandleRefContext.Provider value={handleRef}>
       <StyledSortableRoot
-        ref={ref}
+        ref={disabled ? undefined : ref}
         $disabled={disabled}
         $fill={fill}
         $isDragSourceFaded={fadeSourceWhileDragging && isDragSource}
