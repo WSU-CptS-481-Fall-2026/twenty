@@ -1,4 +1,5 @@
 import { type PageLayoutWidget } from '@/page-layout/types/PageLayoutWidget';
+import { CommentsWidget } from '@/page-layout/widgets/comments/components/CommentsWidget';
 import { CalendarWidget } from '@/page-layout/widgets/calendar/components/CalendarWidget';
 import { CallRecordingWidget } from '@/page-layout/widgets/call-recording/components/CallRecordingWidget';
 import { EmailThreadWidget } from '@/page-layout/widgets/email-thread/components/EmailThreadWidget';
@@ -46,6 +47,9 @@ export const WidgetContentRenderer = ({
 
     case WidgetType.TASKS:
       return <TaskWidget widget={widget} />;
+
+    case WidgetType.COMMENTS:
+      return <CommentsWidget />;
 
     case WidgetType.NOTES:
       return <NoteWidget widget={widget} />;
