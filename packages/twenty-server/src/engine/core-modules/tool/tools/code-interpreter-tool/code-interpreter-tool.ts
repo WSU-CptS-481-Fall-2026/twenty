@@ -36,6 +36,7 @@ import { type ToolOutput } from 'src/engine/core-modules/tool/types/tool-output.
 import { type Tool } from 'src/engine/core-modules/tool/types/tool.type';
 import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
 import { AuthProviderEnum } from 'src/engine/core-modules/workspace/types/workspace.type';
+import { getInternalServerUrl } from 'src/utils/get-internal-server-url';
 
 @Injectable()
 export class CodeInterpreterTool implements Tool {
@@ -112,7 +113,12 @@ export class CodeInterpreterTool implements Tool {
         this.buildExecutionState(executionId, 'running', code, '', '', []),
       );
 
-      const serverUrl = this.twentyConfigService.get('SERVER_URL');
+      const serverUrl = getInternalServerUrl({
+        serverInternalUrlEnv: this.twentyConfigService.get(
+          'SERVER_INTERNAL_URL',
+        ),
+        serverUrlEnv: this.twentyConfigService.get('SERVER_URL'),
+      });
       const sessionToken = await this.generateSessionToken(
         workspaceId,
         userId,

@@ -62,6 +62,7 @@ import { SubscriptionService } from 'src/engine/subscriptions/subscription.servi
 import { WorkspaceCacheService } from 'src/engine/workspace-cache/services/workspace-cache.service';
 import { LogicFunctionPrebuiltWarmUpService } from 'src/engine/core-modules/logic-function/logic-function-prebuilt-warm-up/logic-function-prebuilt-warm-up.service';
 import { cleanServerUrl } from 'src/utils/clean-server-url';
+import { getInternalServerUrl } from 'src/utils/get-internal-server-url';
 
 export class LogicFunctionExecutionException extends Error {
   constructor(
@@ -395,7 +396,14 @@ export class LogicFunctionExecutorService {
         : null,
     ]);
 
-    const baseUrl = cleanServerUrl(this.twentyConfigService.get('SERVER_URL'));
+    const baseUrl = cleanServerUrl(
+      getInternalServerUrl({
+        serverInternalUrlEnv: this.twentyConfigService.get(
+          'SERVER_INTERNAL_URL',
+        ),
+        serverUrlEnv: this.twentyConfigService.get('SERVER_URL'),
+      }),
+    );
     const functionsBaseUrl = await this.buildFunctionsBaseUrl({
       workspaceId,
       flatApplication,

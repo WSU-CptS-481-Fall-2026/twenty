@@ -414,3 +414,21 @@ With multi-workspace enabled, do not list every workspace subdomain here.
 Instead, route API paths (`/graphql`, `/metadata`, `/rest`, `/auth/`,
 `/client-config`, `/file`) to the back-end on each workspace hostname, so every
 workspace stays same-origin — this is how Twenty Cloud runs.
+
+## Behind an authenticating proxy
+
+When the public URL is protected by an authenticating reverse proxy (Google
+Cloud IAP, Cloudflare Access, oauth2-proxy, ...), the server and worker cannot
+call themselves through `SERVER_URL`: those requests are blocked by the proxy.
+Set `SERVER_INTERNAL_URL` to an internal address for those self-calls, e.g.
+the Docker Compose service name or a Kubernetes Service:
+
+```bash
+SERVER_URL=https://crm.example.com
+SERVER_INTERNAL_URL=http://twenty:3000
+```
+
+With several server replicas, point `SERVER_INTERNAL_URL` at an address that
+balances across them (service name or internal load balancer), never at a
+single instance. Browser-facing links, OAuth redirects, emails and webhooks
+keep using `SERVER_URL`.
