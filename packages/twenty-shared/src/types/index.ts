@@ -224,6 +224,7 @@ export type {
   FrontComponentConfiguration,
   TimelineConfiguration,
   TasksConfiguration,
+  CommentsConfiguration,
   NotesConfiguration,
   FilesConfiguration,
   EmailsConfiguration,

@@ -29,6 +29,8 @@ export const getWidgetTitle = (
       return `${t`Iframe`} ${index + 1}`;
     case WidgetConfigurationType.STANDALONE_RICH_TEXT:
       return `${t`Rich Text`} ${index + 1}`;
+    case WidgetConfigurationType.COMMENTS:
+      return t`Comments`;
     case WidgetConfigurationType.FIELD:
     case WidgetConfigurationType.FIELDS:
     case WidgetConfigurationType.CALENDAR:

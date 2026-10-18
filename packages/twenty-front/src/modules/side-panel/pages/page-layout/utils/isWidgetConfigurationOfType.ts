@@ -17,6 +17,7 @@ import {
   type MessageCampaignBodyConfiguration,
   type MessageCampaignDetailsConfiguration,
   type NotesConfiguration,
+  type CommentsConfiguration,
   type PieChartConfiguration,
   type RecordTableConfiguration,
   type StandaloneRichTextConfiguration,
@@ -105,6 +106,9 @@ type WidgetConfigurationTypenameMap = {
   };
   LineChartConfiguration: Omit<LineChartConfiguration, 'configurationType'> & {
     configurationType: WidgetConfigurationType.LINE_CHART;
+  };
+  CommentsConfiguration: Omit<CommentsConfiguration, 'configurationType'> & {
+    configurationType: WidgetConfigurationType.COMMENTS;
   };
   NotesConfiguration: Omit<NotesConfiguration, 'configurationType'> & {
     configurationType: WidgetConfigurationType.NOTES;

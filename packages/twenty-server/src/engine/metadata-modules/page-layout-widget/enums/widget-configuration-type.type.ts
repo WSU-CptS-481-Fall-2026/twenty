@@ -17,6 +17,7 @@ export enum WidgetConfigurationType {
   TIMELINE = 'TIMELINE',
   TASKS = 'TASKS',
   NOTES = 'NOTES',
+  COMMENTS = 'COMMENTS',
   FILES = 'FILES',
   EMAILS = 'EMAILS',
   CALENDAR = 'CALENDAR',

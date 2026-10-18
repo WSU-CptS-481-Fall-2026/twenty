@@ -15,6 +15,7 @@ import { FilesConfigurationDTO } from 'src/engine/metadata-modules/page-layout-w
 import { FrontComponentConfigurationDTO } from 'src/engine/metadata-modules/page-layout-widget/dtos/front-component-configuration.dto';
 import { IframeConfigurationDTO } from 'src/engine/metadata-modules/page-layout-widget/dtos/iframe-configuration.dto';
 import { LineChartConfigurationDTO } from 'src/engine/metadata-modules/page-layout-widget/dtos/line-chart-configuration.dto';
+import { CommentsConfigurationDTO } from 'src/engine/metadata-modules/page-layout-widget/dtos/comments-configuration.dto';
 import { NotesConfigurationDTO } from 'src/engine/metadata-modules/page-layout-widget/dtos/notes-configuration.dto';
 import { RecordTableConfigurationDTO } from 'src/engine/metadata-modules/page-layout-widget/dtos/record-table-configuration.dto';
 import { PieChartConfigurationDTO } from 'src/engine/metadata-modules/page-layout-widget/dtos/pie-chart-configuration.dto';
@@ -50,6 +51,7 @@ export const ALL_WIDGET_CONFIGURATION_TYPE_VALIDATOR_BY_WIDGET_CONFIGURATION_TYP
     FORM_FIELD: FormFieldConfigurationDTO,
     FILES: FilesConfigurationDTO,
     NOTES: NotesConfigurationDTO,
+    COMMENTS: CommentsConfigurationDTO,
     TASKS: TasksConfigurationDTO,
     TIMELINE: TimelineConfigurationDTO,
     VIEW: ViewConfigurationDTO,
