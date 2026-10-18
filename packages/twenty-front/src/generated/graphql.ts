@@ -164,6 +164,14 @@ export type CreateDraftFromWorkflowVersionInput = {
   workflowVersionIdToCopy: Scalars['UUID']['input'];
 };
 
+export type CreateRecordCommentInput = {
+  body: Scalars['String']['input'];
+  id: Scalars['UUID']['input'];
+  mentions?: InputMaybe<Array<RecordCommentMentionInput>>;
+  objectMetadataId: Scalars['UUID']['input'];
+  recordId: Scalars['UUID']['input'];
+};
+
 export type CreateWorkflowVersionEdgeInput = {
   /** Workflow version source step ID */
   source: Scalars['String']['input'];
@@ -207,6 +215,12 @@ export type DateTimeFilter = {
 
 export type DeleteCoreWorkflowsInput = {
   coreWorkflowIds: Array<Scalars['UUID']['input']>;
+};
+
+export type DeleteRecordCommentInput = {
+  commentId: Scalars['UUID']['input'];
+  objectMetadataId: Scalars['UUID']['input'];
+  recordId: Scalars['UUID']['input'];
 };
 
 export type DeleteWorkflowVersionStepInput = {
@@ -330,10 +344,12 @@ export type Mutation = {
   computeStepOutputSchema: Scalars['JSON']['output'];
   createCoreWorkflow: CoreWorkflowDto;
   createDraftFromWorkflowVersion: WorkflowVersionDto;
+  createRecordComment: RecordComment;
   createWorkflowVersionEdge: WorkflowVersionStepChanges;
   createWorkflowVersionStep: WorkflowVersionStepChanges;
   deactivateWorkflowVersion: Scalars['Boolean']['output'];
   deleteCoreWorkflows: Array<DeletedCoreWorkflowDto>;
+  deleteRecordComment: Scalars['Boolean']['output'];
   deleteWorkflowVersionEdge: WorkflowVersionStepChanges;
   deleteWorkflowVersionStep: WorkflowVersionStepChanges;
   dismissMaintenanceModeBanner: Scalars['Boolean']['output'];
@@ -373,6 +389,11 @@ export type MutationCreateDraftFromWorkflowVersionArgs = {
 };
 
 
+export type MutationCreateRecordCommentArgs = {
+  input: CreateRecordCommentInput;
+};
+
+
 export type MutationCreateWorkflowVersionEdgeArgs = {
   input: CreateWorkflowVersionEdgeInput;
 };
@@ -390,6 +411,11 @@ export type MutationDeactivateWorkflowVersionArgs = {
 
 export type MutationDeleteCoreWorkflowsArgs = {
   input: DeleteCoreWorkflowsInput;
+};
+
+
+export type MutationDeleteRecordCommentArgs = {
+  input: DeleteRecordCommentInput;
 };
 
 
@@ -500,6 +526,7 @@ export type Query = {
   /** @deprecated Use getTimelineThreadsFromObjectRecord instead */
   getTimelineThreadsFromPersonId: TimelineThreadsWithTotal;
   isMaintenanceModeBannerDismissed: Scalars['Boolean']['output'];
+  recordComments: RecordCommentPage;
   search: SearchResultConnection;
   workflowStepConnectedAccountHandle?: Maybe<ConnectedAccountHandleDto>;
   workflowVersionContent: WorkflowVersionContent;
@@ -588,6 +615,11 @@ export type QueryGetTimelineThreadsFromPersonIdArgs = {
 };
 
 
+export type QueryRecordCommentsArgs = {
+  input: RecordCommentsInput;
+};
+
+
 export type QuerySearchArgs = {
   after?: InputMaybe<Scalars['String']['input']>;
   excludedObjectNameSingulars?: InputMaybe<Array<Scalars['String']['input']>>;
@@ -605,6 +637,55 @@ export type QueryWorkflowStepConnectedAccountHandleArgs = {
 
 export type QueryWorkflowVersionContentArgs = {
   workflowVersionId: Scalars['UUID']['input'];
+};
+
+export type RecordComment = {
+  __typename?: 'RecordComment';
+  authorName: Scalars['String']['output'];
+  authorWorkspaceMemberId: Scalars['UUID']['output'];
+  body: Scalars['String']['output'];
+  canDelete: Scalars['Boolean']['output'];
+  createdAt: Scalars['DateTime']['output'];
+  id: Scalars['UUID']['output'];
+  mentions: Array<RecordCommentMention>;
+};
+
+export type RecordCommentCursor = {
+  __typename?: 'RecordCommentCursor';
+  createdAt: Scalars['DateTime']['output'];
+  id: Scalars['UUID']['output'];
+};
+
+export type RecordCommentCursorInput = {
+  createdAt: Scalars['DateTime']['input'];
+  id: Scalars['UUID']['input'];
+};
+
+export type RecordCommentMention = {
+  __typename?: 'RecordCommentMention';
+  end: Scalars['Int']['output'];
+  label: Scalars['String']['output'];
+  start: Scalars['Int']['output'];
+  workspaceMemberId: Scalars['UUID']['output'];
+};
+
+export type RecordCommentMentionInput = {
+  end: Scalars['Int']['input'];
+  start: Scalars['Int']['input'];
+  workspaceMemberId: Scalars['UUID']['input'];
+};
+
+export type RecordCommentPage = {
+  __typename?: 'RecordCommentPage';
+  comments: Array<RecordComment>;
+  nextCursor?: Maybe<RecordCommentCursor>;
+};
+
+export type RecordCommentsInput = {
+  cursor?: InputMaybe<RecordCommentCursorInput>;
+  objectMetadataId: Scalars['UUID']['input'];
+  pageSize?: Scalars['Int']['input'];
+  recordId: Scalars['UUID']['input'];
 };
 
 export type RunWorkflowVersion = {
@@ -992,6 +1073,27 @@ export type GetCoreWorkflowVersionsQueryVariables = Exact<{
 
 export type GetCoreWorkflowVersionsQuery = { __typename?: 'Query', coreWorkflowVersions: Array<{ __typename?: 'CoreWorkflowVersionDTO', id: any, label: string, status: CoreWorkflowVersionStatus, workspaceWorkflowVersionId?: any | null, workspaceWorkflowId: any, createdAt: string, updatedAt: string }> };
 
+export type RecordCommentsQueryVariables = Exact<{
+  input: RecordCommentsInput;
+}>;
+
+
+export type RecordCommentsQuery = { __typename?: 'Query', recordComments: { __typename?: 'RecordCommentPage', comments: Array<{ __typename?: 'RecordComment', id: any, body: string, authorName: string, authorWorkspaceMemberId: any, createdAt: string, canDelete: boolean, mentions: Array<{ __typename?: 'RecordCommentMention', workspaceMemberId: any, label: string, start: number, end: number }> }>, nextCursor?: { __typename?: 'RecordCommentCursor', id: any, createdAt: string } | null } };
+
+export type CreateRecordCommentMutationVariables = Exact<{
+  input: CreateRecordCommentInput;
+}>;
+
+
+export type CreateRecordCommentMutation = { __typename?: 'Mutation', createRecordComment: { __typename?: 'RecordComment', id: any, body: string, authorName: string, authorWorkspaceMemberId: any, createdAt: string, canDelete: boolean, mentions: Array<{ __typename?: 'RecordCommentMention', workspaceMemberId: any, label: string, start: number, end: number }> } };
+
+export type DeleteRecordCommentMutationVariables = Exact<{
+  input: DeleteRecordCommentInput;
+}>;
+
+
+export type DeleteRecordCommentMutation = { __typename?: 'Mutation', deleteRecordComment: boolean };
+
 export type WorkflowDiffFragmentFragment = { __typename?: 'WorkflowVersionStepChanges', triggerDiff?: any | null, stepsDiff?: any | null };
 
 export type ActivateWorkflowVersionMutationVariables = Exact<{
@@ -1158,6 +1260,9 @@ export const GetCoreWorkflowDocument = {"kind":"Document","definitions":[{"kind"
 export const GetCoreWorkflowsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetCoreWorkflows"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"first"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"after"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orderBy"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"CoreWorkflowOrderByField"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orderByDirection"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"CoreWorkflowOrderByDirection"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"filter"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"CoreWorkflowFilterInput"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"coreWorkflows"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"first"},"value":{"kind":"Variable","name":{"kind":"Name","value":"first"}}},{"kind":"Argument","name":{"kind":"Name","value":"after"},"value":{"kind":"Variable","name":{"kind":"Name","value":"after"}}},{"kind":"Argument","name":{"kind":"Name","value":"orderBy"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orderBy"}}},{"kind":"Argument","name":{"kind":"Name","value":"orderByDirection"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orderByDirection"}}},{"kind":"Argument","name":{"kind":"Name","value":"filter"},"value":{"kind":"Variable","name":{"kind":"Name","value":"filter"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"edges"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"node"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"statuses"}},{"kind":"Field","name":{"kind":"Name","value":"workspaceWorkflowId"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"cursor"}}]}},{"kind":"Field","name":{"kind":"Name","value":"pageInfo"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"endCursor"}},{"kind":"Field","name":{"kind":"Name","value":"hasNextPage"}}]}},{"kind":"Field","name":{"kind":"Name","value":"totalCount"}}]}}]}}]} as unknown as DocumentNode<GetCoreWorkflowsQuery, GetCoreWorkflowsQueryVariables>;
 export const GetCoreWorkflowVersionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetCoreWorkflowVersion"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"workspaceWorkflowVersionId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"coreWorkflowVersion"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"workspaceWorkflowVersionId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"workspaceWorkflowVersionId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"workspaceWorkflowVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"workspaceWorkflowId"}},{"kind":"Field","name":{"kind":"Name","value":"trigger"}},{"kind":"Field","name":{"kind":"Name","value":"steps"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<GetCoreWorkflowVersionQuery, GetCoreWorkflowVersionQueryVariables>;
 export const GetCoreWorkflowVersionsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetCoreWorkflowVersions"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"workspaceWorkflowId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"coreWorkflowVersions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"workspaceWorkflowId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"workspaceWorkflowId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"workspaceWorkflowVersionId"}},{"kind":"Field","name":{"kind":"Name","value":"workspaceWorkflowId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<GetCoreWorkflowVersionsQuery, GetCoreWorkflowVersionsQueryVariables>;
+export const RecordCommentsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"RecordComments"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"RecordCommentsInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"recordComments"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"comments"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"body"}},{"kind":"Field","name":{"kind":"Name","value":"mentions"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"workspaceMemberId"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"start"}},{"kind":"Field","name":{"kind":"Name","value":"end"}}]}},{"kind":"Field","name":{"kind":"Name","value":"authorName"}},{"kind":"Field","name":{"kind":"Name","value":"authorWorkspaceMemberId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"canDelete"}}]}},{"kind":"Field","name":{"kind":"Name","value":"nextCursor"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<RecordCommentsQuery, RecordCommentsQueryVariables>;
+export const CreateRecordCommentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateRecordComment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateRecordCommentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createRecordComment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"body"}},{"kind":"Field","name":{"kind":"Name","value":"mentions"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"workspaceMemberId"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"start"}},{"kind":"Field","name":{"kind":"Name","value":"end"}}]}},{"kind":"Field","name":{"kind":"Name","value":"authorName"}},{"kind":"Field","name":{"kind":"Name","value":"authorWorkspaceMemberId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"canDelete"}}]}}]}}]} as unknown as DocumentNode<CreateRecordCommentMutation, CreateRecordCommentMutationVariables>;
+export const DeleteRecordCommentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteRecordComment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"DeleteRecordCommentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteRecordComment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}]}]}}]} as unknown as DocumentNode<DeleteRecordCommentMutation, DeleteRecordCommentMutationVariables>;
 export const ActivateWorkflowVersionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ActivateWorkflowVersion"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"workflowVersionId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UUID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"activateWorkflowVersion"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"workflowVersionId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"workflowVersionId"}}}]}]}}]} as unknown as DocumentNode<ActivateWorkflowVersionMutation, ActivateWorkflowVersionMutationVariables>;
 export const ComputeStepOutputSchemaDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ComputeStepOutputSchema"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ComputeStepOutputSchemaInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"computeStepOutputSchema"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}]}]}}]} as unknown as DocumentNode<ComputeStepOutputSchemaMutation, ComputeStepOutputSchemaMutationVariables>;
 export const CreateDraftFromWorkflowVersionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateDraftFromWorkflowVersion"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateDraftFromWorkflowVersionInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createDraftFromWorkflowVersion"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"trigger"}},{"kind":"Field","name":{"kind":"Name","value":"steps"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CreateDraftFromWorkflowVersionMutation, CreateDraftFromWorkflowVersionMutationVariables>;
