@@ -33,6 +33,20 @@ const MEMBERS_WIDGET_PROPS = {
 // Like the note and task pages, the members table sits under the fields in
 // the side panel and on mobile, and gets a tab of its own in full screen.
 const MESSAGE_LIST_PAGE_TABS = {
+  comments: {
+    universalIdentifier:
+      STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS.messageListRecordPage.tabs
+        .comments.universalIdentifier,
+    ...TAB_PROPS.comments,
+    widgets: {
+      comments: {
+        universalIdentifier:
+          STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS.messageListRecordPage.tabs
+            .comments.widgets.comments.universalIdentifier,
+        ...WIDGET_PROPS.comments,
+      },
+    },
+  },
   home: {
     universalIdentifier:
       STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS.messageListRecordPage.tabs.home

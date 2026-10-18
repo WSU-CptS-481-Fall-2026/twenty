@@ -104,6 +104,12 @@ export const TAB_PROPS = {
     icon: 'IconMail',
     layoutMode: PageLayoutTabLayoutMode.VERTICAL_LIST,
   },
+  comments: {
+    title: 'Comments',
+    position: 80,
+    icon: 'IconMessageCircle',
+    layoutMode: PageLayoutTabLayoutMode.VERTICAL_LIST,
+  },
   calendar: {
     title: 'Calendar',
     position: 70,
@@ -156,6 +162,11 @@ export const WIDGET_PROPS = {
   tasks: {
     title: 'Tasks',
     type: WidgetType.TASKS,
+    position: VERTICAL_LIST_LAYOUT_POSITIONS.FIRST,
+  },
+  comments: {
+    title: 'Comments',
+    type: WidgetType.COMMENTS,
     position: VERTICAL_LIST_LAYOUT_POSITIONS.FIRST,
   },
   notes: {

@@ -32,6 +32,11 @@ const DEFAULT_RECORD_PAGE_TAB_DEFINITIONS = [
     widgetConfigurationType: WidgetConfigurationType.TASKS,
   },
   {
+    key: 'comments',
+    widgetKey: 'comments',
+    widgetConfigurationType: WidgetConfigurationType.COMMENTS,
+  },
+  {
     key: 'notes',
     widgetKey: 'notes',
     widgetConfigurationType: WidgetConfigurationType.NOTES,
