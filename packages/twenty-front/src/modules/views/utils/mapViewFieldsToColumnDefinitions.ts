@@ -4,15 +4,17 @@ import { mapArrayToObject } from '~/utils/array/mapArrayToObject';
 import { moveArrayItem } from '~/utils/array/moveArrayItem';
 import { isUndefinedOrNull } from '~/utils/isUndefinedOrNull';
 
-import { isDefined } from 'twenty-shared/utils';
 import { type ViewField } from '@/views/types/ViewField';
+import { isDefined } from 'twenty-shared/utils';
 
 export const mapViewFieldsToColumnDefinitions = ({
   columnDefinitions,
   viewFields,
+  isLabelIdentifierSystemIdField = false,
 }: {
   columnDefinitions: ColumnDefinition<FieldMetadata>[];
   viewFields: ViewField[];
+  isLabelIdentifierSystemIdField?: boolean;
 }): ColumnDefinition<FieldMetadata>[] => {
   let labelIdentifierFieldMetadataId = '';
 
@@ -30,6 +32,9 @@ export const mapViewFieldsToColumnDefinitions = ({
 
       const { isLabelIdentifier } = correspondingColumnDefinition;
 
+      const shouldPinLabelIdentifier =
+        isLabelIdentifier === true && !isLabelIdentifierSystemIdField;
+
       if (isLabelIdentifier === true) {
         labelIdentifierFieldMetadataId =
           correspondingColumnDefinition.fieldMetadataId;
@@ -41,10 +46,10 @@ export const mapViewFieldsToColumnDefinitions = ({
         metadata: correspondingColumnDefinition.metadata,
         iconName: correspondingColumnDefinition.iconName,
         type: correspondingColumnDefinition.type,
-        position: isLabelIdentifier ? 0 : viewField.position,
+        position: shouldPinLabelIdentifier ? 0 : viewField.position,
         size: viewField.size ?? correspondingColumnDefinition.size,
         isLabelIdentifier,
-        isVisible: isLabelIdentifier || viewField.isVisible,
+        isVisible: shouldPinLabelIdentifier || viewField.isVisible,
         viewFieldId: viewField.id,
         isUIEditable: correspondingColumnDefinition.metadata.isUIEditable,
         isSortable: correspondingColumnDefinition.isSortable,
@@ -64,8 +69,8 @@ export const mapViewFieldsToColumnDefinitions = ({
     ({ fieldMetadataId }) => fieldMetadataId === labelIdentifierFieldMetadataId,
   );
 
-  // Label identifier field found in view fields
-  // => move it to the start of the list
+  if (isLabelIdentifierSystemIdField) return columnDefinitionsFromViewFields;
+
   return moveArrayItem(columnDefinitionsFromViewFields, {
     fromIndex: labelIdentifierIndex,
     toIndex: 0,

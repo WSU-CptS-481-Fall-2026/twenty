@@ -72,4 +72,31 @@ describe('normalizeRecordTableWidgetViewFields', () => {
       }),
     ).toBe(viewFields);
   });
+
+  it('should respect the configured visibility and position when the label identifier is the system id field', () => {
+    const viewFields = [
+      {
+        id: 'id-view-field-id',
+        fieldMetadataId: 'id-field-metadata-id',
+        isVisible: false,
+        position: 3,
+        size: 180,
+      },
+      {
+        id: 'role-view-field-id',
+        fieldMetadataId: 'role-field-metadata-id',
+        isVisible: true,
+        position: 0,
+        size: 180,
+      },
+    ];
+
+    const normalizedViewFields = normalizeRecordTableWidgetViewFields({
+      viewFields,
+      labelIdentifierFieldMetadataId: 'id-field-metadata-id',
+      isLabelIdentifierSystemIdField: true,
+    });
+
+    expect(normalizedViewFields).toEqual(viewFields);
+  });
 });

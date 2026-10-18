@@ -42,6 +42,10 @@ export const buildRecordTableWidgetViewSnapshot = (
     ),
   );
 
+  const labelIdentifierField = objectMetadataItem.fields.find(
+    (field) => field.id === objectMetadataItem.labelIdentifierFieldMetadataId,
+  );
+
   const flatViewFields: FlatViewField[] = normalizeRecordTableWidgetViewFields({
     viewFields: sortedFields.map((field, index) => ({
       id: v4(),
@@ -54,6 +58,7 @@ export const buildRecordTableWidgetViewSnapshot = (
     })),
     labelIdentifierFieldMetadataId:
       objectMetadataItem.labelIdentifierFieldMetadataId,
+    isLabelIdentifierSystemIdField: labelIdentifierField?.name === 'id',
   });
 
   return {

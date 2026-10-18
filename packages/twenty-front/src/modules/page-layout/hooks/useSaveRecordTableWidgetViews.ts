@@ -90,11 +90,18 @@ export const useSaveRecordTableWidgetViews = () => {
             objectMetadataItem.id === widgetViewDraft.view.objectMetadataId,
         );
 
+        const labelIdentifierField = objectMetadataItem?.fields.find(
+          (field) =>
+            field.id === objectMetadataItem.labelIdentifierFieldMetadataId,
+        );
+
         const normalizedViewFields = isDefined(objectMetadataItem)
           ? normalizeRecordTableWidgetViewFields({
               viewFields: widgetViewDraft.viewFields,
               labelIdentifierFieldMetadataId:
                 objectMetadataItem.labelIdentifierFieldMetadataId,
+              isLabelIdentifierSystemIdField:
+                labelIdentifierField?.name === 'id',
             })
           : widgetViewDraft.viewFields;
 

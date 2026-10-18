@@ -141,6 +141,11 @@ export const useLoadRecordIndexStates = () => {
       const newFieldDefinitions = mapViewFieldsToColumnDefinitions({
         viewFields: view.viewFields,
         columnDefinitions,
+        isLabelIdentifierSystemIdField:
+          objectMetadataItem.fields.find(
+            (field) =>
+              field.id === objectMetadataItem.labelIdentifierFieldMetadataId,
+          )?.name === 'id',
       });
 
       const recordFields = view.viewFields

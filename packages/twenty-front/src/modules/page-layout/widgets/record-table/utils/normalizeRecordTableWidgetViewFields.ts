@@ -11,6 +11,7 @@ type NormalizeRecordTableWidgetViewFieldsArgs<
 > = {
   viewFields: ViewField[];
   labelIdentifierFieldMetadataId: string;
+  isLabelIdentifierSystemIdField?: boolean;
 };
 
 export const normalizeRecordTableWidgetViewFields = <
@@ -18,12 +19,13 @@ export const normalizeRecordTableWidgetViewFields = <
 >({
   viewFields,
   labelIdentifierFieldMetadataId,
+  isLabelIdentifierSystemIdField = false,
 }: NormalizeRecordTableWidgetViewFieldsArgs<ViewField>): ViewField[] => {
   const labelIdentifierViewField = viewFields.find(
     (viewField) => viewField.fieldMetadataId === labelIdentifierFieldMetadataId,
   );
 
-  if (!isDefined(labelIdentifierViewField)) {
+  if (!isDefined(labelIdentifierViewField) || isLabelIdentifierSystemIdField) {
     return viewFields;
   }
 
