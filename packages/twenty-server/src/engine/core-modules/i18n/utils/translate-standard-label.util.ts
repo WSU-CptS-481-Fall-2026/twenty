@@ -11,13 +11,11 @@ import { type MessageIdTranslator } from 'src/engine/metadata-modules/overrides/
 export const translateStandardLabel = ({
   sourceValue,
   context,
-  isStandardApp,
   applicationCatalog,
   i18nInstance,
 }: {
   sourceValue: string;
   context?: string;
-  isStandardApp: boolean;
   applicationCatalog: Record<string, string> | undefined;
   i18nInstance: MessageIdTranslator;
 }): string => {
@@ -25,24 +23,17 @@ export const translateStandardLabel = ({
     return sourceValue ?? '';
   }
 
-  if (!isDefined(applicationCatalog) && !isStandardApp) {
-    return sourceValue;
-  }
-
   const messageId = generateMessageId(sourceValue, context);
+  const applicationTranslation = applicationCatalog?.[messageId];
 
-  if (isDefined(applicationCatalog)) {
-    return applicationCatalog[messageId] ?? sourceValue;
+  if (isDefined(applicationTranslation)) {
+    return applicationTranslation;
   }
 
-  if (isStandardApp) {
-    const translatedMessage = i18nInstance._(
-      messageId,
-      METADATA_LABEL_PLACEHOLDER_PASS_THROUGH,
-    );
+  const translatedMessage = i18nInstance._(
+    messageId,
+    METADATA_LABEL_PLACEHOLDER_PASS_THROUGH,
+  );
 
-    return translatedMessage === messageId ? sourceValue : translatedMessage;
-  }
-
-  return sourceValue;
+  return translatedMessage === messageId ? sourceValue : translatedMessage;
 };
