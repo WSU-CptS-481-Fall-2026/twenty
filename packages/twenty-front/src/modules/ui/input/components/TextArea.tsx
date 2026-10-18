@@ -1,5 +1,10 @@
 import { styled } from '@linaria/react';
-import { type FocusEventHandler, useId } from 'react';
+import {
+  type ComponentProps,
+  type FocusEventHandler,
+  type Ref,
+  useId,
+} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 
 import { usePushFocusItemToFocusStack } from '@/ui/utilities/focus/hooks/usePushFocusItemToFocusStack';
@@ -11,6 +16,11 @@ import { turnIntoEmptyStringIfWhitespacesOnly } from '~/utils/string/turnIntoEmp
 import { themeCssVariables } from 'twenty-ui/theme-constants';
 
 export type TextAreaProps = {
+  textAreaRef?: Ref<HTMLTextAreaElement>;
+  onSelect?: ComponentProps<'textarea'>['onSelect'];
+  onKeyDown?: ComponentProps<'textarea'>['onKeyDown'];
+  ariaControls?: string;
+  ariaActiveDescendant?: string;
   textAreaId: string;
   label?: string;
   disabled?: boolean;
@@ -94,6 +104,11 @@ const StyledTextAreaContainer = styled.div<{
 `;
 
 export const TextArea = ({
+  textAreaRef,
+  onSelect,
+  onKeyDown,
+  ariaControls,
+  ariaActiveDescendant,
   textAreaId,
   label,
   disabled,
@@ -145,6 +160,12 @@ export const TextArea = ({
 
       <StyledTextAreaContainer variant={variant}>
         <TextareaAutosize
+          ref={textAreaRef}
+          onSelect={onSelect}
+          onKeyDown={onKeyDown}
+          aria-controls={ariaControls}
+          aria-activedescendant={ariaActiveDescendant}
+          aria-autocomplete={ariaControls ? 'list' : undefined}
           id={instanceId}
           placeholder={placeholder}
           maxRows={maxRows}
