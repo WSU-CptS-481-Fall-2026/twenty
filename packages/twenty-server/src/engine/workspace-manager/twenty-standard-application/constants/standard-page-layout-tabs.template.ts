@@ -1,3 +1,5 @@
+import { msg } from '@lingui/core/macro';
+
 import {
   PageLayoutTabLayoutMode,
   type PageLayoutWidgetConditionalDisplay,
@@ -5,6 +7,8 @@ import {
   type PageLayoutWidgetVerticalListPosition,
   WidgetType,
 } from 'twenty-shared/types';
+
+import { i18nLabel } from 'src/engine/workspace-manager/twenty-standard-application/utils/i18n-label.util';
 
 export const CONDITIONAL_DISPLAY_DEVICE_MOBILE = {
   and: [{ '===': [{ var: 'device' }, 'MOBILE'] }],
@@ -105,7 +109,9 @@ export const TAB_PROPS = {
     layoutMode: PageLayoutTabLayoutMode.VERTICAL_LIST,
   },
   comments: {
-    title: 'Comments',
+    title: i18nLabel(
+      msg({ message: 'Comments', context: 'pageLayoutTab.title' }),
+    ),
     position: 80,
     icon: 'IconMessageCircle',
     layoutMode: PageLayoutTabLayoutMode.VERTICAL_LIST,
@@ -165,7 +171,9 @@ export const WIDGET_PROPS = {
     position: VERTICAL_LIST_LAYOUT_POSITIONS.FIRST,
   },
   comments: {
-    title: 'Comments',
+    title: i18nLabel(
+      msg({ message: 'Comments', context: 'pageLayoutWidget.title' }),
+    ),
     type: WidgetType.COMMENTS,
     position: VERTICAL_LIST_LAYOUT_POSITIONS.FIRST,
   },

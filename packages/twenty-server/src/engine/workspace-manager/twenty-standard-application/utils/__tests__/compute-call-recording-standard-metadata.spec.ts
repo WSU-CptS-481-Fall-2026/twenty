@@ -152,7 +152,7 @@ describe('CallRecording standard metadata build', () => {
       Object.keys(
         STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS.callRecordingRecordPage.tabs,
       ),
-    ).toEqual(['home', 'timeline', 'summary', 'callRecording']);
+    ).toEqual(['comments', 'home', 'timeline', 'summary', 'callRecording']);
 
     expect(
       allFlatEntityMaps.flatPageLayoutTabMaps.byUniversalIdentifier[

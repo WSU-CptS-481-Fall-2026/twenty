@@ -170,7 +170,7 @@ describe('CalendarEvent standard metadata build', () => {
       Object.keys(
         STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS.calendarEventRecordPage.tabs,
       ),
-    ).toEqual(['home', 'timeline', 'summary', 'callRecording']);
+    ).toEqual(['comments', 'home', 'timeline', 'summary', 'callRecording']);
 
     expect(timelineWidget?.universalConfiguration).toMatchObject({
       configurationType: WidgetConfigurationType.TIMELINE,
