@@ -84,11 +84,7 @@ export class RecordCommentService {
 
   async list(input: RecordCommentsInput) {
     const authContext = await this.authorizeRecord(input);
-    const pageSize = input.pageSize ?? 10;
-
-    if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50) {
-      throw new BadRequestException('Page size must be between 1 and 50.');
-    }
+    const { pageSize } = input;
 
     const query = this.dataSource
       .getRepository(RecordCommentEntity)

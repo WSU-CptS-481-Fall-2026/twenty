@@ -1,7 +1,8 @@
-import { UseGuards } from '@nestjs/common';
+import { UseGuards, UsePipes } from '@nestjs/common';
 import { Args, Mutation, Query } from '@nestjs/graphql';
 
 import { CoreResolver } from 'src/engine/api/graphql/graphql-config/decorators/core-resolver.decorator';
+import { ResolverValidationPipe } from 'src/engine/core-modules/graphql/pipes/resolver-validation.pipe';
 import {
   CreateRecordCommentInput,
   DeleteRecordCommentInput,
@@ -15,6 +16,7 @@ import { UserAuthGuard } from 'src/engine/guards/user-auth.guard';
 import { WorkspaceAuthGuard } from 'src/engine/guards/workspace-auth.guard';
 
 @UseGuards(WorkspaceAuthGuard, UserAuthGuard, CustomPermissionGuard)
+@UsePipes(ResolverValidationPipe)
 @CoreResolver(() => RecordCommentDTO)
 export class RecordCommentResolver {
   constructor(private readonly recordCommentService: RecordCommentService) {}
