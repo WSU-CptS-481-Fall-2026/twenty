@@ -1,5 +1,7 @@
+import { setupI18n } from '@lingui/core';
 import { generateMessageId } from 'twenty-shared/i18n';
 
+import { messages as arabicMessages } from 'src/engine/core-modules/i18n/locales/generated/ar-SA';
 import { type EffectiveEntityI18nContext } from 'src/engine/metadata-modules/overrides/types/effective-entity-i18n-context.type';
 import { resolveEffectiveTranslatedFlatEntity } from 'src/engine/metadata-modules/overrides/utils/resolve-effective-translated-flat-entity.util';
 
@@ -72,19 +74,60 @@ describe('resolveEffectiveTranslatedFlatEntity', () => {
     expect(effective.isActive).toBe(false);
   });
 
-  it('leaves a custom entity without a catalog untranslated', () => {
+  const resolveCustomFieldLabel = ({
+    label,
+    overrides = null,
+    i18nInstance,
+  }: {
+    label: string;
+    overrides?: unknown;
+    i18nInstance: EffectiveEntityI18nContext['i18nInstance'];
+  }) =>
+    resolveEffectiveTranslatedFlatEntity({
+      metadataName: 'fieldMetadata',
+      flatEntity: {
+        ...flatFieldMetadata,
+        label,
+        overrides,
+        applicationUniversalIdentifier: CUSTOM,
+      },
+      i18nContext: buildI18nContext({
+        isStandardApp: false,
+        ownerApplicationUniversalIdentifier: CUSTOM,
+        i18nInstance,
+      }),
+    }).label;
+
+  it("translates a custom object's system field label with Twenty's catalog", () => {
+    const arabicI18n = setupI18n({
+      locale: 'ar-SA',
+      messages: { 'ar-SA': arabicMessages },
+    });
+
     expect(
-      resolveEffectiveTranslatedFlatEntity({
-        metadataName: 'fieldMetadata',
-        flatEntity: {
-          ...flatFieldMetadata,
-          applicationUniversalIdentifier: CUSTOM,
-        },
-        i18nContext: buildI18nContext({
-          isStandardApp: false,
-          ownerApplicationUniversalIdentifier: CUSTOM,
-        }),
-      }).label,
-    ).toBe('Company');
+      resolveCustomFieldLabel({
+        label: 'Creation date',
+        i18nInstance: arabicI18n,
+      }),
+    ).toBe('تاريخ الإنشاء');
+  });
+
+  it("keeps a custom label that Twenty's catalog does not know", () => {
+    expect(
+      resolveCustomFieldLabel({
+        label: 'Contract renewal',
+        i18nInstance: { _: (id: string) => id },
+      }),
+    ).toBe('Contract renewal');
+  });
+
+  it('keeps a renamed custom label as written', () => {
+    expect(
+      resolveCustomFieldLabel({
+        label: 'Tasks',
+        overrides: { [CUSTOM]: { label: 'Tasks' } },
+        i18nInstance: { _: (id: string) => `translated:${id}` },
+      }),
+    ).toBe('Tasks');
   });
 });

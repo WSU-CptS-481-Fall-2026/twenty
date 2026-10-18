@@ -16,9 +16,11 @@ import { resolveEffectiveFlatEntity } from 'src/engine/metadata-modules/override
 // resolve-flat-entity-overridable-properties), with standardOverrides renamed
 // to overrides. The unified resolver must reproduce these byte-for-byte across
 // the corpus below — this is the safety net for the whole override unification.
-// One deliberate amendment since freezing: workspace translations now resolve
+// Two deliberate amendments since freezing: workspace translations now resolve
 // before the custom-entity short-circuit, so custom entities can carry
-// per-locale translations; both frozen resolvers were updated to match.
+// per-locale translations; and the short-circuit now translates unrenamed
+// labels, since Twenty writes some of them on custom entities. Both frozen
+// resolvers were updated to match.
 
 type Locale = keyof typeof APP_LOCALES | undefined;
 
@@ -49,7 +51,16 @@ const frozenResolveObjectOverride = (
   }
 
   if (!isStandardApp && !isDefined(applicationCatalog)) {
-    return objectMetadata[labelKey] ?? '';
+    return labelKey === 'icon' ||
+      labelKey === 'color' ||
+      isDefined(objectMetadata.overrides?.[labelKey])
+      ? (objectMetadata[labelKey] ?? '')
+      : translateStandardLabel({
+          sourceValue: objectMetadata[labelKey] ?? '',
+          context: `objectMetadata.${labelKey}`,
+          applicationCatalog,
+          i18nInstance,
+        });
   }
 
   if (
@@ -68,7 +79,6 @@ const frozenResolveObjectOverride = (
   return translateStandardLabel({
     sourceValue: objectMetadata[labelKey] ?? '',
     context: `objectMetadata.${labelKey}`,
-    isStandardApp,
     applicationCatalog,
     i18nInstance,
   });
@@ -94,7 +104,14 @@ const frozenResolveFieldOverride = (
   }
 
   if (!isStandardApp && !isDefined(applicationCatalog)) {
-    return fieldMetadata[labelKey] ?? '';
+    return labelKey === 'icon' || isDefined(fieldMetadata.overrides?.[labelKey])
+      ? (fieldMetadata[labelKey] ?? '')
+      : translateStandardLabel({
+          sourceValue: fieldMetadata[labelKey] ?? '',
+          context: `fieldMetadata.${labelKey}`,
+          applicationCatalog,
+          i18nInstance,
+        });
   }
 
   if (labelKey === 'icon' && isDefined(fieldMetadata.overrides?.icon)) {
@@ -108,7 +125,6 @@ const frozenResolveFieldOverride = (
   return translateStandardLabel({
     sourceValue: fieldMetadata[labelKey] ?? '',
     context: `fieldMetadata.${labelKey}`,
-    isStandardApp,
     applicationCatalog,
     i18nInstance,
   });
@@ -327,7 +343,6 @@ const frozenResolveBespokeProperty = (
   return translateStandardLabel({
     sourceValue: baseValue,
     context: metadataLabelContext,
-    isStandardApp,
     applicationCatalog,
     i18nInstance,
   });

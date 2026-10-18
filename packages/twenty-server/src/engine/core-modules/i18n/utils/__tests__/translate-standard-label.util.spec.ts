@@ -22,7 +22,6 @@ describe('translateStandardLabel', () => {
   it('should return the source value when it is empty', () => {
     const result = translateStandardLabel({
       sourceValue: '',
-      isStandardApp: true,
       applicationCatalog: undefined,
       i18nInstance: mockI18n,
     });
@@ -36,7 +35,6 @@ describe('translateStandardLabel', () => {
 
     const result = translateStandardLabel({
       sourceValue: 'Company',
-      isStandardApp: false,
       applicationCatalog: { 'company-id': 'Entreprise' },
       i18nInstance: mockI18n,
     });
@@ -45,12 +43,25 @@ describe('translateStandardLabel', () => {
     expect(mockI18n._).not.toHaveBeenCalled();
   });
 
-  it('should fall back to the source value when the catalog has no matching entry', () => {
-    mockGenerateMessageId.mockReturnValue('missing-id');
+  it('should fall back to the standard bundle when the catalog has no matching entry', () => {
+    mockGenerateMessageId.mockReturnValue('company-id');
+    mockI18n._.mockReturnValue('Entreprise');
 
     const result = translateStandardLabel({
       sourceValue: 'Company',
-      isStandardApp: false,
+      applicationCatalog: {},
+      i18nInstance: mockI18n,
+    });
+
+    expect(result).toBe('Entreprise');
+  });
+
+  it('should return the source value when neither the catalog nor the standard bundle has a translation', () => {
+    mockGenerateMessageId.mockReturnValue('missing-id');
+    mockI18n._.mockReturnValue('missing-id');
+
+    const result = translateStandardLabel({
+      sourceValue: 'Company',
       applicationCatalog: {},
       i18nInstance: mockI18n,
     });
@@ -64,7 +75,6 @@ describe('translateStandardLabel', () => {
 
     const result = translateStandardLabel({
       sourceValue: 'Company',
-      isStandardApp: true,
       applicationCatalog: { 'company-id': 'Entreprise' },
       i18nInstance: mockI18n,
     });
@@ -79,7 +89,6 @@ describe('translateStandardLabel', () => {
 
     const result = translateStandardLabel({
       sourceValue: 'Company',
-      isStandardApp: true,
       applicationCatalog: undefined,
       i18nInstance: mockI18n,
     });
@@ -99,23 +108,10 @@ describe('translateStandardLabel', () => {
 
     const result = translateStandardLabel({
       sourceValue: 'Company',
-      isStandardApp: true,
       applicationCatalog: undefined,
       i18nInstance: mockI18n,
     });
 
     expect(result).toBe('Company');
-  });
-
-  it('should return the source value for a non-standard app without a catalog', () => {
-    const result = translateStandardLabel({
-      sourceValue: 'Company',
-      isStandardApp: false,
-      applicationCatalog: undefined,
-      i18nInstance: mockI18n,
-    });
-
-    expect(result).toBe('Company');
-    expect(mockGenerateMessageId).not.toHaveBeenCalled();
   });
 });

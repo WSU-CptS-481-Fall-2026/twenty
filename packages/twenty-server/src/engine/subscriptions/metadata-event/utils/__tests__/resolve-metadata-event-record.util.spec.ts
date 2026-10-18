@@ -75,17 +75,31 @@ describe('resolveMetadataEventRecord', () => {
     expect(resolved.shortLabel).toBeNull();
   });
 
-  it('should return custom-application values untouched when no catalog applies', () => {
+  it("should keep custom-application values that Twenty's catalog does not know", () => {
     const resolved = resolveMetadataEventRecord({
       metadataName: 'view',
       record: { name: 'My custom view' },
       i18nContext: buildI18nContext({
         isStandardApp: false,
         applicationCatalog: undefined,
+        i18nInstance: { _: (messageId: string) => messageId },
       }),
     });
 
     expect(resolved.name).toBe('My custom view');
+  });
+
+  it("should translate custom-application values through Twenty's catalog", () => {
+    const resolved = resolveMetadataEventRecord({
+      metadataName: 'pageLayoutTab',
+      record: { title: 'Home' },
+      i18nContext: buildI18nContext({
+        isStandardApp: false,
+        applicationCatalog: undefined,
+      }),
+    });
+
+    expect(resolved.title).toMatch(/^translated:/);
   });
   // Regression: delivery strips `overrides`, so anything it does not apply is
   // lost. The publisher used to apply every overridable property, not just the
