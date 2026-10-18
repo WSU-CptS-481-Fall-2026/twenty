@@ -16,13 +16,14 @@ import { DeleteManyRecordsService } from 'src/engine/core-modules/record-crud/se
 import { DeleteRecordService } from 'src/engine/core-modules/record-crud/services/delete-record.service';
 import { FindRecordsService } from 'src/engine/core-modules/record-crud/services/find-records.service';
 import { GroupByRecordsService } from 'src/engine/core-modules/record-crud/services/group-by-records.service';
+import { MergeRecordsService } from 'src/engine/core-modules/record-crud/services/merge-records.service';
 import { UpdateManyRecordsService } from 'src/engine/core-modules/record-crud/services/update-many-records.service';
 import { UpdateRecordService } from 'src/engine/core-modules/record-crud/services/update-record.service';
 import { UpsertManyRecordsService } from 'src/engine/core-modules/record-crud/services/upsert-many-records.service';
 import { type FindRecordsParams } from 'src/engine/core-modules/record-crud/types/find-records-params.type';
 import { TOOL_PROVIDERS } from 'src/engine/core-modules/tool-provider/constants/tool-providers.token';
-import { RecordFilesResolverService } from 'src/engine/core-modules/tool-provider/services/record-files-resolver.service';
 import { type ToolProvider } from 'src/engine/core-modules/tool-provider/interfaces/tool-provider.interface';
+import { RecordFilesResolverService } from 'src/engine/core-modules/tool-provider/services/record-files-resolver.service';
 import { type ToolDescriptor } from 'src/engine/core-modules/tool-provider/types/tool-descriptor.type';
 import { type ToolExecutionRef } from 'src/engine/core-modules/tool-provider/types/tool-execution-ref.type';
 import { type ToolIndexEntry } from 'src/engine/core-modules/tool-provider/types/tool-index-entry.type';
@@ -49,6 +50,7 @@ export class ToolExecutorService {
     private readonly upsertManyRecordsService: UpsertManyRecordsService,
     private readonly deleteRecordService: DeleteRecordService,
     private readonly deleteManyRecordsService: DeleteManyRecordsService,
+    private readonly mergeRecordsService: MergeRecordsService,
     private readonly logicFunctionExecutorService: LogicFunctionExecutorService,
     private readonly recordFilesResolverService: RecordFilesResolverService,
     private readonly workspaceCacheService: WorkspaceCacheService,
@@ -253,6 +255,18 @@ export class ToolExecutorService {
         return this.deleteManyRecordsService.execute({
           objectName: ref.objectNameSingular,
           filter: args.filter as Record<string, unknown>,
+          authContext,
+          rolePermissionConfig: context.rolePermissionConfig,
+        });
+
+      case 'merge_many':
+        return this.mergeRecordsService.execute({
+          objectName: ref.objectNameSingular as 'company' | 'person',
+          ids: args.ids as string[],
+          conflictPriorityIndex: args.conflictPriorityIndex as
+            | number
+            | undefined,
+          dryRun: args.dryRun as boolean | undefined,
           authContext,
           rolePermissionConfig: context.rolePermissionConfig,
         });

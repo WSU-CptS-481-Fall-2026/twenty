@@ -27,19 +27,20 @@ import {
   generateGroupByToolInputSchema,
   hasGroupByToolInputSchema,
 } from 'src/engine/core-modules/record-crud/zod-schemas/group-by-tool.zod-schema';
+import { mergeManySchema } from 'src/engine/core-modules/record-crud/zod-schemas/merge-many.schema';
 import { type ToolDescriptor } from 'src/engine/core-modules/tool-provider/types/tool-descriptor.type';
 import { type ToolIndexEntry } from 'src/engine/core-modules/tool-provider/types/tool-index-entry.type';
 import { type ToolOutput } from 'src/engine/core-modules/tool/types/tool-output.type';
 import { getDatabaseCrudToolFlatObjects } from 'src/engine/metadata-modules/ai/ai-agent/utils/get-database-crud-tool-flat-objects.util';
-import { type FlatObjectPermission } from 'src/engine/metadata-modules/flat-object-permission/types/flat-object-permission.type';
 import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.service';
+import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
+import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
+import { type FlatObjectPermission } from 'src/engine/metadata-modules/flat-object-permission/types/flat-object-permission.type';
 import { getObjectsPermissionsFromRolePermissionConfig } from 'src/engine/twenty-orm/utils/get-objects-permissions-from-role-permission-config.util';
 import { getRoleIdsFromRolePermissionConfig } from 'src/engine/twenty-orm/utils/get-role-ids-from-role-permission-config.util';
 import { WorkspaceCacheService } from 'src/engine/workspace-cache/services/workspace-cache.service';
 import { ToolCategory } from 'twenty-shared/ai';
-import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
-import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
-import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
 
 @Injectable()
 export class DatabaseToolProvider implements ToolProvider {
@@ -465,6 +466,41 @@ export class DatabaseToolProvider implements ToolProvider {
           operation: 'delete_many',
         });
       }
+
+      if (
+        (objectMetadata.nameSingular === 'company' ||
+          objectMetadata.nameSingular === 'person') &&
+        canUpdateRecords &&
+        canBeManagedByAutomation
+      ) {
+        const mergeToolName =
+          objectMetadata.nameSingular === 'company'
+            ? `merge_many_companies`
+            : `merge_many_people`;
+
+        descriptors.push({
+          name: mergeToolName,
+          ...getCrudToolLabels(
+            'merge_many',
+            flatObject.labelPlural,
+            this.i18nService,
+            context.locale,
+          ),
+          description: `Merge duplicate ${objectMetadata.labelPlural} into one record. The first id survives; conflictPriorityIndex picks which record wins conflicting fields; other fields are merged. ALWAYS run first with dryRun: true to preview the merged record before writing changes.`,
+          category: ToolCategory.DATABASE_CRUD,
+          ...(shouldIncludeSchema(mergeToolName) && {
+            inputSchema: toToolJsonSchema(mergeManySchema),
+          }),
+          executionRef: {
+            kind: 'database_crud',
+            objectNameSingular: objectMetadata.nameSingular,
+            operation: 'merge_many',
+          },
+          objectName: objectMetadata.nameSingular,
+          icon: flatObject.icon ?? undefined,
+          operation: 'merge_many',
+        });
+      }
     }
 
     return descriptors;
@@ -518,6 +554,7 @@ export class DatabaseToolProvider implements ToolProvider {
       toolNames.has(`update_many_${snakePlural}`) ||
       toolNames.has(`delete_one_${snakeSingular}`) ||
       toolNames.has(`delete_many_${snakePlural}`) ||
+      toolNames.has(`merge_many_${snakePlural}`) ||
       toolNames.has(`upsert_many_${snakePlural}`)
     );
   }
