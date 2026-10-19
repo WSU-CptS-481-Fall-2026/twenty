@@ -1,10 +1,36 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 
+import { Storage } from '@google-cloud/storage';
+
 import { StorageDriverType } from 'src/engine/core-modules/file-storage/interfaces/file-storage.interface';
 
 import { FileStorageDriverFactory } from 'src/engine/core-modules/file-storage/file-storage-driver.factory';
+import { type ConfigVariables } from 'src/engine/core-modules/twenty-config/config-variables';
 import { ConfigGroupHashService } from 'src/engine/core-modules/twenty-config/services/config-group-hash.service';
 import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
+
+jest.mock('@google-cloud/storage', () => {
+  const actual = jest.requireActual('@google-cloud/storage');
+
+  return {
+    ...actual,
+    Storage: jest.fn().mockImplementation(() => ({ bucket: jest.fn() })),
+  };
+});
+
+const mockGcsConfig =
+  (overrides: Partial<ConfigVariables> = {}) =>
+  (key: keyof ConfigVariables) => {
+    const config: Partial<ConfigVariables> = {
+      STORAGE_TYPE: StorageDriverType.GCS,
+      STORAGE_GCS_BUCKET_NAME: 'test-bucket',
+      STORAGE_GCS_API_ENDPOINT: 'http://localhost:9000',
+      STORAGE_GCS_PRESIGNED_URL_ENABLED: false,
+      ...overrides,
+    };
+
+    return config[key];
+  };
 
 describe('FileStorageDriverFactory', () => {
   let factory: FileStorageDriverFactory;
@@ -76,6 +102,19 @@ describe('FileStorageDriverFactory', () => {
 
       expect(result).toBe('s3|s3-hash-123');
       expect(twentyConfigService.get).toHaveBeenCalledWith('STORAGE_TYPE');
+    });
+
+    it('should build config key for GCS storage', () => {
+      jest
+        .spyOn(twentyConfigService, 'get')
+        .mockReturnValue(StorageDriverType.GCS);
+      jest
+        .spyOn(configGroupHashService, 'computeHash')
+        .mockReturnValue('gcs-hash-123');
+
+      const result = factory['buildConfigKey']();
+
+      expect(result).toBe('gcs|gcs-hash-123');
     });
 
     it('should throw error for unsupported storage type', () => {
@@ -162,6 +201,29 @@ describe('FileStorageDriverFactory', () => {
 
       expect(driver).toBeDefined();
       expect(driver.constructor.name).toBe('ValidatedStorageDriver');
+    });
+
+    it('should create ValidatedStorageDriver wrapping GcsDriver with Application Default Credentials', () => {
+      jest
+        .spyOn(twentyConfigService, 'get')
+        .mockImplementation(mockGcsConfig());
+
+      const driver = factory['createDriver']();
+
+      expect(driver.constructor.name).toBe('ValidatedStorageDriver');
+      expect(Storage).toHaveBeenCalledWith({
+        apiEndpoint: 'http://localhost:9000',
+      });
+    });
+
+    it('should use the default GCS endpoint when the endpoint is empty', () => {
+      jest
+        .spyOn(twentyConfigService, 'get')
+        .mockImplementation(mockGcsConfig({ STORAGE_GCS_API_ENDPOINT: '' }));
+
+      factory['createDriver']();
+
+      expect(Storage).toHaveBeenCalledWith({ apiEndpoint: undefined });
     });
 
     it('should throw error for invalid storage driver type', () => {
@@ -275,6 +337,37 @@ describe('FileStorageDriverFactory', () => {
       expect(driver1).not.toBe(driver2);
       expect(driver1.constructor.name).toBe('ValidatedStorageDriver');
       expect(driver2.constructor.name).toBe('ValidatedStorageDriver');
+    });
+
+    it('should create new driver when switching from S3 to GCS', () => {
+      jest
+        .spyOn(twentyConfigService, 'get')
+        .mockImplementation((key: string) => {
+          switch (key) {
+            case 'STORAGE_TYPE':
+              return StorageDriverType.S_3;
+            case 'STORAGE_S3_NAME':
+              return 'test-bucket';
+            case 'STORAGE_S3_REGION':
+              return 'us-east-1';
+            default:
+              return undefined;
+          }
+        });
+      jest
+        .spyOn(configGroupHashService, 'computeHash')
+        .mockReturnValue('same-hash');
+
+      const s3Driver = factory.getCurrentDriver();
+
+      jest
+        .spyOn(twentyConfigService, 'get')
+        .mockImplementation(mockGcsConfig());
+
+      const gcsDriver = factory.getCurrentDriver();
+
+      expect(gcsDriver).not.toBe(s3Driver);
+      expect(Storage).toHaveBeenCalledTimes(1);
     });
 
     it('should throw error for unsupported storage type', () => {

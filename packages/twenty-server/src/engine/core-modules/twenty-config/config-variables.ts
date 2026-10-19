@@ -692,8 +692,9 @@ export class ConfigVariables {
 
   @ConfigVariablesMetadata({
     group: ConfigVariablesGroup.STORAGE_CONFIG,
+    isEnvOnly: true,
     description:
-      'Custom Google Cloud Storage API endpoint. Optional, only needed for an emulator such as fake-gcs-server (e.g. http://fake-gcs:4443). Omit for Google Cloud Storage itself.',
+      'Custom Google Cloud Storage API endpoint. Optional, only needed for an emulator such as storage-testbench (e.g. http://localhost:9000). Omit for Google Cloud Storage itself. Settable from the environment only, since it redirects every file read and write.',
     type: ConfigVariableType.STRING,
   })
   @ValidateIf((env) => env.STORAGE_TYPE === StorageDriverType.GCS)
