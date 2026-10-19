@@ -581,7 +581,7 @@ export class ConfigVariables {
 
   @ConfigVariablesMetadata({
     group: ConfigVariablesGroup.STORAGE_CONFIG,
-    description: 'Type of storage to use (local or S3)',
+    description: 'Type of storage to use (local, S3 or GCS)',
     type: ConfigVariableType.ENUM,
     options: Object.values(StorageDriverType),
   })
@@ -678,6 +678,37 @@ export class ConfigVariables {
   @CastToPositiveNumber()
   @IsOptional()
   STORAGE_S3_PRESIGNED_URL_EXPIRES_IN: number = 900;
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.STORAGE_CONFIG,
+    description:
+      'Name of the Google Cloud Storage bucket used for file storage. Required. Credentials come from Application Default Credentials (the attached service account on Cloud Run or GKE), so no key is needed.',
+    type: ConfigVariableType.STRING,
+  })
+  @ValidateIf((env) => env.STORAGE_TYPE === StorageDriverType.GCS)
+  @IsString()
+  @IsNotEmpty()
+  STORAGE_GCS_BUCKET_NAME: string;
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.STORAGE_CONFIG,
+    description:
+      'Custom Google Cloud Storage API endpoint. Optional, only needed for an emulator such as fake-gcs-server (e.g. http://fake-gcs:4443). Omit for Google Cloud Storage itself.',
+    type: ConfigVariableType.STRING,
+  })
+  @ValidateIf((env) => env.STORAGE_TYPE === StorageDriverType.GCS)
+  @IsOptional()
+  STORAGE_GCS_API_ENDPOINT: string;
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.STORAGE_CONFIG,
+    description:
+      'When enabled, file downloads are 302-redirected to V4 signed URLs and direct uploads go straight to the bucket via signed PUT URLs instead of being proxied through the server. Signing with the runtime service account requires the roles/iam.serviceAccountTokenCreator role on that account, and the bucket needs a CORS policy allowing PUT from the frontend origin. Uses STORAGE_S3_PRESIGNED_URL_EXPIRES_IN as the URL lifetime.',
+    type: ConfigVariableType.BOOLEAN,
+  })
+  @ValidateIf((env) => env.STORAGE_TYPE === StorageDriverType.GCS)
+  @IsOptional()
+  STORAGE_GCS_PRESIGNED_URL_ENABLED = false;
 
   @ConfigVariablesMetadata({
     group: ConfigVariablesGroup.STORAGE_CONFIG,
