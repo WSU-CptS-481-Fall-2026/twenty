@@ -45,7 +45,7 @@ export const useDirectFileUpload = () => {
       method: 'PUT',
       headers: { 'Content-Type': uploadTarget.contentType },
       body: file,
-      credentials: 'omit',
+      credentials: 'same-origin',
       signal,
     });
 
