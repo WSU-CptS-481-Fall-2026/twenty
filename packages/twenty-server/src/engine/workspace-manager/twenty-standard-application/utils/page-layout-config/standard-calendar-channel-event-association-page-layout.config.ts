@@ -14,6 +14,22 @@ import {
 } from 'src/engine/workspace-manager/twenty-standard-application/utils/page-layout-config/standard-page-layout-config.type';
 
 const CALENDAR_CHANNEL_EVENT_ASSOCIATION_PAGE_TABS = {
+  comments: {
+    universalIdentifier:
+      STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS
+        .calendarChannelEventAssociationRecordPage.tabs.comments
+        .universalIdentifier,
+    ...TAB_PROPS.comments,
+    widgets: {
+      comments: {
+        universalIdentifier:
+          STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS
+            .calendarChannelEventAssociationRecordPage.tabs.comments.widgets
+            .comments.universalIdentifier,
+        ...WIDGET_PROPS.comments,
+      },
+    },
+  },
   home: {
     universalIdentifier:
       STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS

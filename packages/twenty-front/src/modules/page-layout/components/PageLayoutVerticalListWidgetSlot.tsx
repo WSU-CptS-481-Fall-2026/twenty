@@ -83,12 +83,14 @@ export const PageLayoutVerticalListWidgetSlot = ({
       isInEditMode={isInEditMode}
       shouldShowDivider={shouldShowDivider}
     >
-      <DragDropItemDropTarget
-        index={index}
-        droppableId={tabId}
-        orientation="horizontal"
-        compact
-      />
+      {isInEditMode && (
+        <DragDropItemDropTarget
+          index={index}
+          droppableId={tabId}
+          orientation="horizontal"
+          compact
+        />
+      )}
       <DragDropItemSortableCell
         id={widget.id}
         index={index}

@@ -47,6 +47,7 @@ export const STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS = {
   companyRecordPage: buildStandardObjectRecordPageLayout({
     objectUniversalIdentifier: STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.company,
     tabs: {
+      comments: { title: 'Comments', widgets: { comments: 'Comments' } },
       home: {
         title: 'Home',
         widgets: {
@@ -96,6 +97,7 @@ export const STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS = {
   personRecordPage: buildStandardObjectRecordPageLayout({
     objectUniversalIdentifier: STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.person,
     tabs: {
+      comments: { title: 'Comments', widgets: { comments: 'Comments' } },
       home: {
         title: 'Home',
         widgets: {
@@ -147,6 +149,7 @@ export const STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS = {
     objectUniversalIdentifier:
       STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.opportunity,
     tabs: {
+      comments: { title: 'Comments', widgets: { comments: 'Comments' } },
       home: {
         title: 'Home',
         widgets: {
@@ -197,6 +200,7 @@ export const STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS = {
   noteRecordPage: buildStandardObjectRecordPageLayout({
     objectUniversalIdentifier: STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.note,
     tabs: {
+      comments: { title: 'Comments', widgets: { comments: 'Comments' } },
       home: {
         title: 'Home',
         widgets: {
@@ -227,6 +231,7 @@ export const STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS = {
   taskRecordPage: buildStandardObjectRecordPageLayout({
     objectUniversalIdentifier: STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.task,
     tabs: {
+      comments: { title: 'Comments', widgets: { comments: 'Comments' } },
       home: {
         title: 'Home',
         widgets: {
@@ -257,6 +262,7 @@ export const STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS = {
   workflowRecordPage: buildStandardObjectRecordPageLayout({
     objectUniversalIdentifier: STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.workflow,
     tabs: {
+      comments: { title: 'Comments', widgets: { comments: 'Comments' } },
       flow: {
         title: 'Flow',
         widgets: {
@@ -269,6 +275,7 @@ export const STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS = {
     objectUniversalIdentifier:
       STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.workflowVersion,
     tabs: {
+      comments: { title: 'Comments', widgets: { comments: 'Comments' } },
       home: {
         title: 'Home',
         widgets: {
@@ -288,6 +295,7 @@ export const STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS = {
     objectUniversalIdentifier:
       STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.workflowRun,
     tabs: {
+      comments: { title: 'Comments', widgets: { comments: 'Comments' } },
       home: {
         title: 'Home',
         widgets: {
@@ -306,6 +314,7 @@ export const STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS = {
   blocklistRecordPage: buildStandardObjectRecordPageLayout({
     objectUniversalIdentifier: STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.blocklist,
     tabs: {
+      comments: { title: 'Comments', widgets: { comments: 'Comments' } },
       home: {
         title: 'Home',
         widgets: {
@@ -325,6 +334,7 @@ export const STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS = {
       objectUniversalIdentifier:
         STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.calendarChannelEventAssociation,
       tabs: {
+        comments: { title: 'Comments', widgets: { comments: 'Comments' } },
         home: {
           title: 'Home',
           widgets: {
@@ -343,6 +353,7 @@ export const STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS = {
     objectUniversalIdentifier:
       STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.calendarEvent,
     tabs: {
+      comments: { title: 'Comments', widgets: { comments: 'Comments' } },
       home: {
         title: 'Home',
         widgets: {
@@ -375,6 +386,7 @@ export const STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS = {
     objectUniversalIdentifier:
       STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.calendarEventParticipant,
     tabs: {
+      comments: { title: 'Comments', widgets: { comments: 'Comments' } },
       home: {
         title: 'Home',
         widgets: {
@@ -393,6 +405,7 @@ export const STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS = {
     objectUniversalIdentifier:
       STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.callRecording,
     tabs: {
+      comments: { title: 'Comments', widgets: { comments: 'Comments' } },
       home: {
         title: 'Home',
         widgets: {
@@ -424,6 +437,7 @@ export const STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS = {
       objectUniversalIdentifier:
         STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.messageChannelMessageAssociation,
       tabs: {
+        comments: { title: 'Comments', widgets: { comments: 'Comments' } },
         home: {
           title: 'Home',
           widgets: {
@@ -443,6 +457,7 @@ export const STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS = {
       objectUniversalIdentifier:
         STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.messageChannelMessageAssociationMessageFolder,
       tabs: {
+        comments: { title: 'Comments', widgets: { comments: 'Comments' } },
         home: {
           title: 'Home',
           widgets: {
@@ -461,6 +476,7 @@ export const STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS = {
     objectUniversalIdentifier:
       STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.messageParticipant,
     tabs: {
+      comments: { title: 'Comments', widgets: { comments: 'Comments' } },
       home: {
         title: 'Home',
         widgets: {
@@ -479,6 +495,7 @@ export const STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS = {
     objectUniversalIdentifier:
       STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.workflowAutomatedTrigger,
     tabs: {
+      comments: { title: 'Comments', widgets: { comments: 'Comments' } },
       home: {
         title: 'Home',
         widgets: {
@@ -497,6 +514,7 @@ export const STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS = {
     objectUniversalIdentifier:
       STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.messageThread,
     tabs: {
+      comments: { title: 'Comments', widgets: { comments: 'Comments' } },
       home: {
         title: 'Home',
         widgets: {
@@ -509,6 +527,7 @@ export const STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS = {
     objectUniversalIdentifier:
       STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.messageList,
     tabs: {
+      comments: { title: 'Comments', widgets: { comments: 'Comments' } },
       home: {
         title: 'Home',
         widgets: {
@@ -528,6 +547,7 @@ export const STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS = {
     objectUniversalIdentifier:
       STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.messageCampaign,
     tabs: {
+      comments: { title: 'Comments', widgets: { comments: 'Comments' } },
       home: {
         title: 'Home',
         widgets: {

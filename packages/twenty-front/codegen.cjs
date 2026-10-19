@@ -5,6 +5,7 @@ module.exports = {
     (process.env.REACT_APP_SERVER_BASE_URL ?? 'http://localhost:3000') +
     '/graphql',
   documents: [
+    './src/modules/record-comments/graphql/**/*.{ts,tsx}',
     './src/modules/workflow/**/graphql/**/*.{ts,tsx}',
     './src/modules/object-core/**/graphql/**/*.{ts,tsx}',
     './src/modules/activities/emails/graphql/queries/**/*.{ts,tsx}',

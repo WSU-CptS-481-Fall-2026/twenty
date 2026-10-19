@@ -6,6 +6,7 @@ import { CallRecordingSummaryConfigurationDTO } from 'src/engine/metadata-module
 import { CallRecordingTranscriptConfigurationDTO } from 'src/engine/metadata-modules/page-layout-widget/dtos/call-recording-transcript-configuration.dto';
 import { EmailThreadConfigurationDTO } from 'src/engine/metadata-modules/page-layout-widget/dtos/email-thread-configuration.dto';
 import { FormFieldConfigurationDTO } from 'src/engine/metadata-modules/page-layout-widget/dtos/form-field-configuration.dto';
+import { CommentsConfigurationDTO } from 'src/engine/metadata-modules/page-layout-widget/dtos/comments-configuration.dto';
 import { FieldConfigurationDTO } from 'src/engine/metadata-modules/page-layout-widget/dtos/field-configuration.dto';
 import { FrontComponentConfigurationDTO } from 'src/engine/metadata-modules/page-layout-widget/dtos/front-component-configuration.dto';
 import { IframeConfigurationDTO } from 'src/engine/metadata-modules/page-layout-widget/dtos/iframe-configuration.dto';
@@ -189,6 +190,12 @@ export const validateWidgetConfigurationInput = ({
         'Tasks configuration is not supported yet',
         PageLayoutWidgetExceptionCode.INVALID_PAGE_LAYOUT_WIDGET_DATA,
       );
+    case WidgetConfigurationType.COMMENTS:
+      errors = validateWidgetConfigurationByDto(
+        CommentsConfigurationDTO,
+        configuration,
+      );
+      break;
     case WidgetConfigurationType.NOTES:
       throw new PageLayoutWidgetException(
         'Notes configuration is not supported yet',

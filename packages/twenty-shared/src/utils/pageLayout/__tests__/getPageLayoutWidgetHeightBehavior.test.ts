@@ -20,6 +20,7 @@ const EXPECTED_IS_VIEWPORT_FILLING_BY_WIDGET_TYPE = {
   [WidgetType.MESSAGE_CAMPAIGN_BODY]: false,
   [WidgetType.MESSAGE_CAMPAIGN_DETAILS]: false,
   [WidgetType.NOTES]: true,
+  [WidgetType.COMMENTS]: true,
   [WidgetType.FORM_FIELD]: false,
   [WidgetType.RECORD_TABLE]: false,
   [WidgetType.STANDALONE_RICH_TEXT]: false,

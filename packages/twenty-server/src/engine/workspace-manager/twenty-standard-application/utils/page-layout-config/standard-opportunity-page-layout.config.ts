@@ -15,6 +15,20 @@ import {
 } from 'src/engine/workspace-manager/twenty-standard-application/utils/page-layout-config/standard-page-layout-config.type';
 
 const OPPORTUNITY_PAGE_TABS = {
+  comments: {
+    universalIdentifier:
+      STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS.opportunityRecordPage.tabs
+        .comments.universalIdentifier,
+    ...TAB_PROPS.comments,
+    widgets: {
+      comments: {
+        universalIdentifier:
+          STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS.opportunityRecordPage.tabs
+            .comments.widgets.comments.universalIdentifier,
+        ...WIDGET_PROPS.comments,
+      },
+    },
+  },
   home: {
     universalIdentifier:
       STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS.opportunityRecordPage.tabs.home

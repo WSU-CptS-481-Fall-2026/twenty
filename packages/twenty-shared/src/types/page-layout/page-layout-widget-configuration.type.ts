@@ -151,6 +151,10 @@ export type TasksConfiguration = {
   configurationType: 'TASKS';
 };
 
+export type CommentsConfiguration = {
+  configurationType: 'COMMENTS';
+};
+
 export type NotesConfiguration = {
   configurationType: 'NOTES';
 };
@@ -216,6 +220,7 @@ export type PageLayoutWidgetConfiguration =
   | TimelineConfiguration
   | TasksConfiguration
   | NotesConfiguration
+  | CommentsConfiguration
   | FilesConfiguration
   | EmailsConfiguration
   | CalendarConfiguration

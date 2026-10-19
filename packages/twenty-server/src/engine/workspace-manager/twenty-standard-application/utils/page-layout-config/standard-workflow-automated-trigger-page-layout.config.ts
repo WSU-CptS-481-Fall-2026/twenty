@@ -14,6 +14,21 @@ import {
 } from 'src/engine/workspace-manager/twenty-standard-application/utils/page-layout-config/standard-page-layout-config.type';
 
 const WORKFLOW_AUTOMATED_TRIGGER_PAGE_TABS = {
+  comments: {
+    universalIdentifier:
+      STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS
+        .workflowAutomatedTriggerRecordPage.tabs.comments.universalIdentifier,
+    ...TAB_PROPS.comments,
+    widgets: {
+      comments: {
+        universalIdentifier:
+          STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS
+            .workflowAutomatedTriggerRecordPage.tabs.comments.widgets.comments
+            .universalIdentifier,
+        ...WIDGET_PROPS.comments,
+      },
+    },
+  },
   home: {
     universalIdentifier:
       STANDARD_PAGE_LAYOUT_UNIVERSAL_IDENTIFIERS

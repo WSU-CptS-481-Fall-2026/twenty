@@ -1,0 +1,1 @@
+export const RECORD_COMMENTS_PAGE_SIZE = 10;

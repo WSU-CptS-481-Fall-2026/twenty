@@ -58,6 +58,7 @@ import { OpenApiModule } from 'src/engine/core-modules/open-api/open-api.module'
 import { PublicDomainModule } from 'src/engine/core-modules/public-domain/public-domain.module';
 import { RedisClientModule } from 'src/engine/core-modules/redis-client/redis-client.module';
 import { RedisClientService } from 'src/engine/core-modules/redis-client/redis-client.service';
+import { RecordCommentModule } from 'src/engine/core-modules/record-comment/record-comment.module';
 import { SearchModule } from 'src/engine/core-modules/search/search.module';
 import { WorkspaceSsoModule } from 'src/engine/core-modules/sso/sso.module';
 import { WellKnownModule } from 'src/engine/core-modules/well-known/well-known.module';
@@ -90,6 +91,7 @@ import { FileModule } from './file/file.module';
 
 @Module({
   imports: [
+    RecordCommentModule,
     EnvironmentModule,
     TwentyConfigModule.forRoot(),
     HealthModule,

@@ -37,6 +37,7 @@ import {
   IconListDetails,
   IconListSearch,
   IconNotes,
+  IconMessageCircle,
 } from 'twenty-ui/icon';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -272,6 +273,46 @@ export const SidePanelPageLayoutRecordPageWidgetTypeSelect = () => {
     tabId,
   ]);
 
+  const handleCreateCommentsWidget = () => {
+    const replacePositionIndex = getExistingWidgetPositionIndex();
+    removeExistingWidgetIfReplacing();
+    const activeTab = store
+      .get(pageLayoutDraftState)
+      .tabs.find((tab) => tab.id === tabId);
+    const widgetId = uuidv4();
+    const newWidget: PageLayoutWidget = {
+      __typename: 'PageLayoutWidget',
+      id: widgetId,
+      applicationId: '',
+      universalIdentifier: widgetId,
+      isSystemSideEffect: false,
+      isActive: true,
+      pageLayoutTabId: tabId,
+      title: t`Comments`,
+      type: WidgetType.COMMENTS,
+      configuration: {
+        __typename: 'CommentsConfiguration',
+        configurationType: WidgetConfigurationType.COMMENTS,
+      },
+      position: {
+        __typename: 'PageLayoutWidgetVerticalListPosition',
+        layoutMode: PageLayoutTabLayoutMode.VERTICAL_LIST,
+        index: replacePositionIndex ?? activeTab?.widgets.length ?? 0,
+      },
+      objectMetadataId: objectMetadataItem.id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      deletedAt: null,
+    };
+    store.set(pageLayoutDraftState, (previousDraft) => ({
+      ...previousDraft,
+      tabs: addWidgetToTab(previousDraft.tabs, tabId, newWidget),
+    }));
+    setPageLayoutEditingWidgetId(widgetId);
+    insertCreatedWidgetAtContext({ newWidgetId: widgetId });
+    closeSidePanelMenu();
+  };
+
   const handleCreateNoteWidget = () => {
     const replacePositionIndex = getExistingWidgetPositionIndex();
     removeExistingWidgetIfReplacing();
@@ -347,6 +388,7 @@ export const SidePanelPageLayoutRecordPageWidgetTypeSelect = () => {
     'fields',
     'field',
     'note',
+    'comments',
     ...frontComponentsWithSelectItemId.map(({ selectItemId }) => selectItemId),
   ];
 
@@ -367,6 +409,17 @@ export const SidePanelPageLayoutRecordPageWidgetTypeSelect = () => {
             label={t`Field`}
             id="field"
             onClick={handleCreateFieldWidget}
+          />
+        </SelectableListItem>
+        <SelectableListItem
+          itemId="comments"
+          onEnter={handleCreateCommentsWidget}
+        >
+          <CommandMenuItem
+            label={t`Comments`}
+            Icon={IconMessageCircle}
+            onClick={handleCreateCommentsWidget}
+            id="comments"
           />
         </SelectableListItem>
         <SelectableListItem itemId="note" onEnter={handleCreateNoteWidget}>
