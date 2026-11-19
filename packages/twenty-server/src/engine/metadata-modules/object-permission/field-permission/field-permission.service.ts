@@ -36,8 +36,10 @@ type DesiredFieldPermission = {
   canUpdateFieldValue?: boolean | null;
 };
 
-const keyFrom = (objectMetadataId: string, fieldMetadataId: string) =>
-  `${objectMetadataId}:${fieldMetadataId}`;
+const getFieldPermissionKey = (
+  objectMetadataId: string,
+  fieldMetadataId: string,
+) => `${objectMetadataId}:${fieldMetadataId}`;
 
 const toUniversalFlatFieldPermission = (
   fieldPermission: FlatFieldPermission,
@@ -61,8 +63,9 @@ const filterFieldPermissionsByRole = (
   roleUniversalIdentifier: string | undefined,
 ): FlatFieldPermission[] =>
   Object.values(flatFieldPermissionMaps.byUniversalIdentifier).filter(
-    (fp): fp is FlatFieldPermission =>
-      isDefined(fp) && fp.roleUniversalIdentifier === roleUniversalIdentifier,
+    (permission): permission is FlatFieldPermission =>
+      isDefined(permission) &&
+      permission.roleUniversalIdentifier === roleUniversalIdentifier,
   );
 
 const filterFieldPermissionsByInputObjects = (
@@ -70,10 +73,10 @@ const filterFieldPermissionsByInputObjects = (
   input: UpsertFieldPermissionsInput,
 ): FlatFieldPermission[] => {
   const desiredObjectMetadataIds = new Set(
-    input.fieldPermissions.map((fp) => fp.objectMetadataId),
+    input.fieldPermissions.map((permission) => permission.objectMetadataId),
   );
-  return fieldPermissions.filter((fp) =>
-    desiredObjectMetadataIds.has(fp.objectMetadataId),
+  return fieldPermissions.filter((permission) =>
+    desiredObjectMetadataIds.has(permission.objectMetadataId),
   );
 };
 
@@ -130,7 +133,7 @@ export class FieldPermissionService {
     );
 
     for (const fieldPermission of input.fieldPermissions) {
-      this.validateFieldPermission({
+      this.validateFieldPermissionOrThrow({
         allFieldPermissions: input.fieldPermissions,
         fieldPermission,
         flatObjectMetadataMaps,
@@ -140,17 +143,22 @@ export class FieldPermissionService {
       });
     }
 
-    const desiredMap = this.buildDesiredFieldPermissions({ input });
+    const desiredFieldPermissionByKey = this.buildDesiredFieldPermissions({
+      input,
+    });
 
-    const mirroredFieldKeys = this.addRelatedFieldPermissionsToDesired({
-      desiredMap,
+    const mirroredFieldKeys = this.mirrorRelationFieldPermissionsOrThrow({
+      desiredFieldPermissionByKey,
       inputFieldPermissions: input.fieldPermissions,
       flatFieldMetadataMaps,
     });
 
     const inputFieldKeys = new Set(
-      input.fieldPermissions.map((fp) =>
-        keyFrom(fp.objectMetadataId, fp.fieldMetadataId),
+      input.fieldPermissions.map((permission) =>
+        getFieldPermissionKey(
+          permission.objectMetadataId,
+          permission.fieldMetadataId,
+        ),
       ),
     );
 
@@ -162,7 +170,7 @@ export class FieldPermissionService {
     const { flatEntityToCreate, flatEntityToUpdate, flatEntityToDelete } =
       this.computeFieldPermissionOperations({
         input,
-        desiredMap,
+        desiredFieldPermissionByKey,
         mirroredFieldKeys,
         inputFieldKeys,
         currentFieldPermissionsForRole,
@@ -212,21 +220,24 @@ export class FieldPermissionService {
   }: {
     input: UpsertFieldPermissionsInput;
   }): Map<string, DesiredFieldPermission> {
-    const desiredMap = new Map<string, DesiredFieldPermission>();
+    const desiredFieldPermissionByKey = new Map<
+      string,
+      DesiredFieldPermission
+    >();
 
     for (const fieldPermission of input.fieldPermissions) {
-      const bothNull =
+      const isCleared =
         (fieldPermission.canReadFieldValue === null ||
           fieldPermission.canReadFieldValue === undefined) &&
         (fieldPermission.canUpdateFieldValue === null ||
           fieldPermission.canUpdateFieldValue === undefined);
 
-      if (bothNull) {
+      if (isCleared) {
         continue;
       }
 
-      desiredMap.set(
-        keyFrom(
+      desiredFieldPermissionByKey.set(
+        getFieldPermissionKey(
           fieldPermission.objectMetadataId,
           fieldPermission.fieldMetadataId,
         ),
@@ -239,12 +250,12 @@ export class FieldPermissionService {
       );
     }
 
-    return desiredMap;
+    return desiredFieldPermissionByKey;
   }
 
   private computeFieldPermissionOperations({
     input,
-    desiredMap,
+    desiredFieldPermissionByKey,
     mirroredFieldKeys,
     inputFieldKeys,
     currentFieldPermissionsForRole,
@@ -254,7 +265,7 @@ export class FieldPermissionService {
     flatFieldMetadataMaps,
   }: {
     input: UpsertFieldPermissionsInput;
-    desiredMap: Map<string, DesiredFieldPermission>;
+    desiredFieldPermissionByKey: Map<string, DesiredFieldPermission>;
     mirroredFieldKeys: Set<string>;
     inputFieldKeys: Set<string>;
     currentFieldPermissionsForRole: FlatFieldPermission[];
@@ -274,15 +285,21 @@ export class FieldPermissionService {
     const flatEntityToDelete: UniversalFlatFieldPermission[] = [];
 
     const currentByKey = new Map(
-      currentFieldPermissionsForRole.map((fp) => [
-        keyFrom(fp.objectMetadataId, fp.fieldMetadataId),
-        fp,
+      currentFieldPermissionsForRole.map((permission) => [
+        getFieldPermissionKey(
+          permission.objectMetadataId,
+          permission.fieldMetadataId,
+        ),
+        permission,
       ]),
     );
 
-    for (const [key, desired] of desiredMap) {
+    for (const [key, desired] of desiredFieldPermissionByKey) {
       const current = currentByKey.get(
-        keyFrom(desired.objectMetadataId, desired.fieldMetadataId),
+        getFieldPermissionKey(
+          desired.objectMetadataId,
+          desired.fieldMetadataId,
+        ),
       );
 
       if (!isDefined(current)) {
@@ -334,11 +351,11 @@ export class FieldPermissionService {
           continue;
         }
 
-        const changed =
+        const hasChanged =
           effectiveCanRead !== current.canReadFieldValue ||
           effectiveCanUpdate !== current.canUpdateFieldValue;
 
-        if (changed) {
+        if (hasChanged) {
           const now = new Date().toISOString();
           flatEntityToUpdate.push({
             ...toUniversalFlatFieldPermission(current),
@@ -351,9 +368,12 @@ export class FieldPermissionService {
     }
 
     for (const current of currentFieldPermissionsForRole) {
-      const key = keyFrom(current.objectMetadataId, current.fieldMetadataId);
+      const key = getFieldPermissionKey(
+        current.objectMetadataId,
+        current.fieldMetadataId,
+      );
 
-      if (inputFieldKeys.has(key) && !desiredMap.has(key)) {
+      if (inputFieldKeys.has(key) && !desiredFieldPermissionByKey.has(key)) {
         flatEntityToDelete.push(toUniversalFlatFieldPermission(current));
       }
     }
@@ -403,7 +423,7 @@ export class FieldPermissionService {
     ]);
   }
 
-  private validateFieldPermission({
+  private validateFieldPermissionOrThrow({
     allFieldPermissions,
     fieldPermission,
     flatObjectMetadataMaps,
@@ -499,18 +519,21 @@ export class FieldPermissionService {
     }
   }
 
-  private addRelatedFieldPermissionsToDesired({
-    desiredMap,
+  private mirrorRelationFieldPermissionsOrThrow({
+    desiredFieldPermissionByKey,
     inputFieldPermissions,
     flatFieldMetadataMaps,
   }: {
-    desiredMap: Map<string, DesiredFieldPermission>;
+    desiredFieldPermissionByKey: Map<string, DesiredFieldPermission>;
     inputFieldPermissions: UpsertFieldPermissionsInput['fieldPermissions'];
     flatFieldMetadataMaps: FlatEntityMaps<FlatFieldMetadata>;
   }): Set<string> {
     const inputKeys = new Set(
-      inputFieldPermissions.map((fp) =>
-        keyFrom(fp.objectMetadataId, fp.fieldMetadataId),
+      inputFieldPermissions.map((permission) =>
+        getFieldPermissionKey(
+          permission.objectMetadataId,
+          permission.fieldMetadataId,
+        ),
       ),
     );
     const mirroredKeys = new Set<string>();
@@ -547,12 +570,12 @@ export class FieldPermissionService {
         continue;
       }
 
-      const targetKey = keyFrom(targetObjectId, targetFieldId);
+      const targetKey = getFieldPermissionKey(targetObjectId, targetFieldId);
       if (inputKeys.has(targetKey)) {
         const targetInInput = inputFieldPermissions.find(
-          (fp) =>
-            fp.objectMetadataId === targetObjectId &&
-            fp.fieldMetadataId === targetFieldId,
+          (permission) =>
+            permission.objectMetadataId === targetObjectId &&
+            permission.fieldMetadataId === targetFieldId,
         );
         if (isDefined(targetInInput)) {
           const hasConflict =
@@ -572,13 +595,13 @@ export class FieldPermissionService {
         continue;
       }
 
-      // A cleared source row is dropped from desiredMap by the bothNull gate above,
+      // A cleared source row is dropped from desiredFieldPermissionByKey by the isCleared gate above,
       // so the mirror has to be told to clear explicitly or it survives as an orphan
       const sourceIsCleared =
         !isDefined(fieldPermission.canReadFieldValue) &&
         !isDefined(fieldPermission.canUpdateFieldValue);
 
-      desiredMap.set(targetKey, {
+      desiredFieldPermissionByKey.set(targetKey, {
         objectMetadataId: targetObjectId,
         fieldMetadataId: targetFieldId,
         canReadFieldValue: sourceIsCleared
