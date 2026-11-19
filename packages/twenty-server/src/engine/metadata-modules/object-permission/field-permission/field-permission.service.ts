@@ -13,6 +13,7 @@ import { type AllFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/
 import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
 import { findFlatEntityByIdInFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps.util';
 import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
+import { type FlatFieldPermissionMaps } from 'src/engine/metadata-modules/flat-field-permission/types/flat-field-permission-maps.type';
 import { type FlatFieldPermission } from 'src/engine/metadata-modules/flat-field-permission/types/flat-field-permission.type';
 import { fromCreateFieldPermissionInputToUniversalFlatFieldPermission } from 'src/engine/metadata-modules/flat-field-permission/utils/from-create-field-permission-input-to-universal-flat-field-permission.util';
 import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
@@ -38,7 +39,7 @@ type DesiredFieldPermission = {
 const keyFrom = (objectMetadataId: string, fieldMetadataId: string) =>
   `${objectMetadataId}:${fieldMetadataId}`;
 
-const toUniversalFlatFieldPermissionToDelete = (
+const toUniversalFlatFieldPermission = (
   fieldPermission: FlatFieldPermission,
 ): UniversalFlatFieldPermission => ({
   universalIdentifier: fieldPermission.universalIdentifier,
@@ -54,6 +55,27 @@ const toUniversalFlatFieldPermissionToDelete = (
   createdAt: fieldPermission.createdAt,
   updatedAt: fieldPermission.updatedAt,
 });
+
+const filterFieldPermissionsByRole = (
+  flatFieldPermissionMaps: FlatFieldPermissionMaps,
+  roleUniversalIdentifier: string | undefined,
+): FlatFieldPermission[] =>
+  Object.values(flatFieldPermissionMaps.byUniversalIdentifier).filter(
+    (fp): fp is FlatFieldPermission =>
+      isDefined(fp) && fp.roleUniversalIdentifier === roleUniversalIdentifier,
+  );
+
+const filterFieldPermissionsByInputObjects = (
+  fieldPermissions: FlatFieldPermission[],
+  input: UpsertFieldPermissionsInput,
+): FlatFieldPermission[] => {
+  const desiredObjectMetadataIds = new Set(
+    input.fieldPermissions.map((fp) => fp.objectMetadataId),
+  );
+  return fieldPermissions.filter((fp) =>
+    desiredObjectMetadataIds.has(fp.objectMetadataId),
+  );
+};
 
 @Injectable()
 export class FieldPermissionService {
@@ -102,11 +124,9 @@ export class FieldPermissionService {
           | undefined)
       : undefined;
 
-    const currentFieldPermissionsForRole = Object.values(
-      flatFieldPermissionMaps.byUniversalIdentifier,
-    ).filter(
-      (fp): fp is FlatFieldPermission =>
-        isDefined(fp) && fp.roleUniversalIdentifier === roleUniversalIdentifier,
+    const currentFieldPermissionsForRole = filterFieldPermissionsByRole(
+      flatFieldPermissionMaps,
+      roleUniversalIdentifier,
     );
 
     for (const fieldPermission of input.fieldPermissions) {
@@ -157,11 +177,9 @@ export class FieldPermissionService {
       flatEntityToUpdate.length === 0 &&
       flatEntityToDelete.length === 0
     ) {
-      const desiredObjectMetadataIds = new Set(
-        input.fieldPermissions.map((fp) => fp.objectMetadataId),
-      );
-      return currentFieldPermissionsForRole.filter((fp) =>
-        desiredObjectMetadataIds.has(fp.objectMetadataId),
+      return filterFieldPermissionsByInputObjects(
+        currentFieldPermissionsForRole,
+        input,
       );
     }
 
@@ -181,20 +199,12 @@ export class FieldPermissionService {
         },
       );
 
-    const resultFieldPermissions = Object.values(
-      freshFlatFieldPermissionMaps.byUniversalIdentifier,
-    ).filter(
-      (fp): fp is FlatFieldPermission =>
-        isDefined(fp) && fp.roleUniversalIdentifier === roleUniversalIdentifier,
+    const resultFieldPermissions = filterFieldPermissionsByRole(
+      freshFlatFieldPermissionMaps,
+      roleUniversalIdentifier,
     );
 
-    const desiredObjectMetadataIds = new Set(
-      input.fieldPermissions.map((fp) => fp.objectMetadataId),
-    );
-    const filtered = resultFieldPermissions.filter((fp) =>
-      desiredObjectMetadataIds.has(fp.objectMetadataId),
-    );
-    return filtered;
+    return filterFieldPermissionsByInputObjects(resultFieldPermissions, input);
   }
 
   private buildDesiredFieldPermissions({
@@ -318,9 +328,7 @@ export class FieldPermissionService {
               workspaceCustomFlatApplication.universalIdentifier;
 
           if (!isForeignMirroredRow) {
-            flatEntityToDelete.push(
-              toUniversalFlatFieldPermissionToDelete(current),
-            );
+            flatEntityToDelete.push(toUniversalFlatFieldPermission(current));
           }
 
           continue;
@@ -333,17 +341,9 @@ export class FieldPermissionService {
         if (changed) {
           const now = new Date().toISOString();
           flatEntityToUpdate.push({
-            universalIdentifier: current.universalIdentifier,
-            applicationUniversalIdentifier:
-              current.applicationUniversalIdentifier,
-            roleUniversalIdentifier: current.roleUniversalIdentifier,
-            objectMetadataUniversalIdentifier:
-              current.objectMetadataUniversalIdentifier,
-            fieldMetadataUniversalIdentifier:
-              current.fieldMetadataUniversalIdentifier,
+            ...toUniversalFlatFieldPermission(current),
             canReadFieldValue: effectiveCanRead,
             canUpdateFieldValue: effectiveCanUpdate,
-            createdAt: current.createdAt,
             updatedAt: now,
           });
         }
@@ -354,9 +354,7 @@ export class FieldPermissionService {
       const key = keyFrom(current.objectMetadataId, current.fieldMetadataId);
 
       if (inputFieldKeys.has(key) && !desiredMap.has(key)) {
-        flatEntityToDelete.push(
-          toUniversalFlatFieldPermissionToDelete(current),
-        );
+        flatEntityToDelete.push(toUniversalFlatFieldPermission(current));
       }
     }
 
