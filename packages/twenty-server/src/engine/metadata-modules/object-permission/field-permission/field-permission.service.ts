@@ -107,8 +107,6 @@ export class FieldPermissionService {
         isDefined(fp) && fp.roleUniversalIdentifier === roleUniversalIdentifier,
     );
 
-    const desiredMap = new Map<string, DesiredFieldPermission>();
-
     for (const fieldPermission of input.fieldPermissions) {
       this.validateFieldPermission({
         allFieldPermissions: input.fieldPermissions,
@@ -118,7 +116,11 @@ export class FieldPermissionService {
         rolesPermissions,
         flatRole,
       });
+    }
 
+    const desiredMap = new Map<string, DesiredFieldPermission>();
+
+    for (const fieldPermission of input.fieldPermissions) {
       const bothNull =
         (fieldPermission.canReadFieldValue === null ||
           fieldPermission.canReadFieldValue === undefined) &&
