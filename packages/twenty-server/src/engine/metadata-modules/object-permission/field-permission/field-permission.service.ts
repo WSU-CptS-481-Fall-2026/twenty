@@ -5,9 +5,11 @@ import { FieldMetadataType } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 
 import { ApplicationService } from 'src/engine/core-modules/application/application.service';
+import { type FlatApplication } from 'src/engine/core-modules/application/types/flat-application.type';
 import { UserInputError } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
 import { RelationType } from 'src/engine/metadata-modules/field-metadata/interfaces/relation-type.interface';
 import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.service';
+import { type AllFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/all-flat-entity-maps.type';
 import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
 import { findFlatEntityByIdInFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps.util';
 import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
@@ -118,6 +120,88 @@ export class FieldPermissionService {
       });
     }
 
+    const desiredMap = this.buildDesiredFieldPermissions({ input });
+
+    const mirroredFieldKeys = this.addRelatedFieldPermissionsToDesired({
+      desiredMap,
+      inputFieldPermissions: input.fieldPermissions,
+      flatFieldMetadataMaps,
+    });
+
+    const inputFieldKeys = new Set(
+      input.fieldPermissions.map((fp) =>
+        keyFrom(fp.objectMetadataId, fp.fieldMetadataId),
+      ),
+    );
+
+    const { workspaceCustomFlatApplication } =
+      await this.applicationService.findWorkspaceTwentyStandardAndCustomApplicationOrThrow(
+        { workspaceId },
+      );
+
+    const { flatEntityToCreate, flatEntityToUpdate, flatEntityToDelete } =
+      this.computeFieldPermissionOperations({
+        input,
+        desiredMap,
+        mirroredFieldKeys,
+        inputFieldKeys,
+        currentFieldPermissionsForRole,
+        workspaceCustomFlatApplication,
+        flatRoleMaps,
+        flatObjectMetadataMaps,
+        flatFieldMetadataMaps,
+      });
+
+    if (
+      flatEntityToCreate.length === 0 &&
+      flatEntityToUpdate.length === 0 &&
+      flatEntityToDelete.length === 0
+    ) {
+      const desiredObjectMetadataIds = new Set(
+        input.fieldPermissions.map((fp) => fp.objectMetadataId),
+      );
+      return currentFieldPermissionsForRole.filter((fp) =>
+        desiredObjectMetadataIds.has(fp.objectMetadataId),
+      );
+    }
+
+    await this.runUpsertMigration({
+      workspaceId,
+      flatEntityToCreate,
+      flatEntityToUpdate,
+      flatEntityToDelete,
+      workspaceCustomFlatApplication,
+    });
+
+    const { flatFieldPermissionMaps: freshFlatFieldPermissionMaps } =
+      await this.workspaceManyOrAllFlatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatFieldPermissionMaps'],
+        },
+      );
+
+    const resultFieldPermissions = Object.values(
+      freshFlatFieldPermissionMaps.byUniversalIdentifier,
+    ).filter(
+      (fp): fp is FlatFieldPermission =>
+        isDefined(fp) && fp.roleUniversalIdentifier === roleUniversalIdentifier,
+    );
+
+    const desiredObjectMetadataIds = new Set(
+      input.fieldPermissions.map((fp) => fp.objectMetadataId),
+    );
+    const filtered = resultFieldPermissions.filter((fp) =>
+      desiredObjectMetadataIds.has(fp.objectMetadataId),
+    );
+    return filtered;
+  }
+
+  private buildDesiredFieldPermissions({
+    input,
+  }: {
+    input: UpsertFieldPermissionsInput;
+  }): Map<string, DesiredFieldPermission> {
     const desiredMap = new Map<string, DesiredFieldPermission>();
 
     for (const fieldPermission of input.fieldPermissions) {
@@ -145,23 +229,34 @@ export class FieldPermissionService {
       );
     }
 
-    const mirroredFieldKeys = this.addRelatedFieldPermissionsToDesired({
-      desiredMap,
-      inputFieldPermissions: input.fieldPermissions,
-      flatFieldMetadataMaps,
-    });
+    return desiredMap;
+  }
 
-    const inputFieldKeys = new Set(
-      input.fieldPermissions.map((fp) =>
-        keyFrom(fp.objectMetadataId, fp.fieldMetadataId),
-      ),
-    );
-
-    const { workspaceCustomFlatApplication } =
-      await this.applicationService.findWorkspaceTwentyStandardAndCustomApplicationOrThrow(
-        { workspaceId },
-      );
-
+  private computeFieldPermissionOperations({
+    input,
+    desiredMap,
+    mirroredFieldKeys,
+    inputFieldKeys,
+    currentFieldPermissionsForRole,
+    workspaceCustomFlatApplication,
+    flatRoleMaps,
+    flatObjectMetadataMaps,
+    flatFieldMetadataMaps,
+  }: {
+    input: UpsertFieldPermissionsInput;
+    desiredMap: Map<string, DesiredFieldPermission>;
+    mirroredFieldKeys: Set<string>;
+    inputFieldKeys: Set<string>;
+    currentFieldPermissionsForRole: FlatFieldPermission[];
+    workspaceCustomFlatApplication: FlatApplication;
+    flatRoleMaps: AllFlatEntityMaps['flatRoleMaps'];
+    flatObjectMetadataMaps: AllFlatEntityMaps['flatObjectMetadataMaps'];
+    flatFieldMetadataMaps: AllFlatEntityMaps['flatFieldMetadataMaps'];
+  }): {
+    flatEntityToCreate: (UniversalFlatFieldPermission & { id: string })[];
+    flatEntityToUpdate: UniversalFlatFieldPermission[];
+    flatEntityToDelete: UniversalFlatFieldPermission[];
+  } {
     const flatEntityToCreate: (UniversalFlatFieldPermission & {
       id: string;
     })[] = [];
@@ -265,19 +360,22 @@ export class FieldPermissionService {
       }
     }
 
-    if (
-      flatEntityToCreate.length === 0 &&
-      flatEntityToUpdate.length === 0 &&
-      flatEntityToDelete.length === 0
-    ) {
-      const desiredObjectMetadataIds = new Set(
-        input.fieldPermissions.map((fp) => fp.objectMetadataId),
-      );
-      return currentFieldPermissionsForRole.filter((fp) =>
-        desiredObjectMetadataIds.has(fp.objectMetadataId),
-      );
-    }
+    return { flatEntityToCreate, flatEntityToUpdate, flatEntityToDelete };
+  }
 
+  private async runUpsertMigration({
+    workspaceId,
+    flatEntityToCreate,
+    flatEntityToUpdate,
+    flatEntityToDelete,
+    workspaceCustomFlatApplication,
+  }: {
+    workspaceId: string;
+    flatEntityToCreate: (UniversalFlatFieldPermission & { id: string })[];
+    flatEntityToUpdate: UniversalFlatFieldPermission[];
+    flatEntityToDelete: UniversalFlatFieldPermission[];
+    workspaceCustomFlatApplication: FlatApplication;
+  }): Promise<void> {
     const buildAndRunResult =
       await this.workspaceMigrationValidateBuildAndRunService.validateBuildAndRunWorkspaceMigration(
         {
@@ -305,29 +403,6 @@ export class FieldPermissionService {
     await this.workspaceCacheService.invalidateAndRecompute(workspaceId, [
       'rolesPermissions',
     ]);
-
-    const { flatFieldPermissionMaps: freshFlatFieldPermissionMaps } =
-      await this.workspaceManyOrAllFlatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
-        {
-          workspaceId,
-          flatMapsKeys: ['flatFieldPermissionMaps'],
-        },
-      );
-
-    const resultFieldPermissions = Object.values(
-      freshFlatFieldPermissionMaps.byUniversalIdentifier,
-    ).filter(
-      (fp): fp is FlatFieldPermission =>
-        isDefined(fp) && fp.roleUniversalIdentifier === roleUniversalIdentifier,
-    );
-
-    const desiredObjectMetadataIds = new Set(
-      input.fieldPermissions.map((fp) => fp.objectMetadataId),
-    );
-    const filtered = resultFieldPermissions.filter((fp) =>
-      desiredObjectMetadataIds.has(fp.objectMetadataId),
-    );
-    return filtered;
   }
 
   private validateFieldPermission({
