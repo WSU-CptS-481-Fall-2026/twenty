@@ -11,7 +11,6 @@ import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadat
 import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
 import { findFlatEntityByIdInFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps.util';
 import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
-import { type FlatFieldPermissionMaps } from 'src/engine/metadata-modules/flat-field-permission/types/flat-field-permission-maps.type';
 import { type FlatFieldPermission } from 'src/engine/metadata-modules/flat-field-permission/types/flat-field-permission.type';
 import { fromCreateFieldPermissionInputToUniversalFlatFieldPermission } from 'src/engine/metadata-modules/flat-field-permission/utils/from-create-field-permission-input-to-universal-flat-field-permission.util';
 import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
@@ -70,32 +69,23 @@ export class FieldPermissionService {
     workspaceId: string;
     input: UpsertFieldPermissionsInput;
   }): Promise<FlatFieldPermission[]> {
-    const [flatMapsForRoleObjectField, flatFieldPermissionMapsResult] =
-      await Promise.all([
-        this.workspaceManyOrAllFlatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
-          {
-            workspaceId,
-            flatMapsKeys: [
-              'flatRoleMaps',
-              'flatObjectMetadataMaps',
-              'flatFieldMetadataMaps',
-            ],
-          },
-        ),
-        this.workspaceCacheService.getOrRecompute(workspaceId, [
-          'flatFieldPermissionMaps',
-        ] as unknown as Parameters<WorkspaceCacheService['getOrRecompute']>[1]),
-      ]);
-    const flatRoleMaps = flatMapsForRoleObjectField.flatRoleMaps;
-    const flatObjectMetadataMaps =
-      flatMapsForRoleObjectField.flatObjectMetadataMaps;
-    const flatFieldMetadataMaps =
-      flatMapsForRoleObjectField.flatFieldMetadataMaps;
-    const flatFieldPermissionMapsResolved: FlatFieldPermissionMaps = (
-      flatFieldPermissionMapsResult as unknown as {
-        flatFieldPermissionMaps: FlatFieldPermissionMaps;
-      }
-    ).flatFieldPermissionMaps;
+    const {
+      flatRoleMaps,
+      flatObjectMetadataMaps,
+      flatFieldMetadataMaps,
+      flatFieldPermissionMaps,
+    } =
+      await this.workspaceManyOrAllFlatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: [
+            'flatRoleMaps',
+            'flatObjectMetadataMaps',
+            'flatFieldMetadataMaps',
+            'flatFieldPermissionMaps',
+          ],
+        },
+      );
 
     const { rolesPermissions } =
       await this.workspaceCacheService.getOrRecompute(workspaceId, [
@@ -111,7 +101,7 @@ export class FieldPermissionService {
       : undefined;
 
     const currentFieldPermissionsForRole = Object.values(
-      flatFieldPermissionMapsResolved.byUniversalIdentifier,
+      flatFieldPermissionMaps.byUniversalIdentifier,
     ).filter(
       (fp): fp is FlatFieldPermission =>
         isDefined(fp) && fp.roleUniversalIdentifier === roleUniversalIdentifier,
@@ -300,9 +290,7 @@ export class FieldPermissionService {
           isSystemBuild: false,
           applicationUniversalIdentifier:
             workspaceCustomFlatApplication.universalIdentifier,
-        } as Parameters<
-          WorkspaceMigrationValidateBuildAndRunService['validateBuildAndRunWorkspaceMigration']
-        >[0],
+        },
       );
 
     if (buildAndRunResult.status === 'fail') {
@@ -316,13 +304,13 @@ export class FieldPermissionService {
       'rolesPermissions',
     ]);
 
-    const freshFlatFieldPermissionMaps: FlatFieldPermissionMaps = (
-      (await this.workspaceCacheService.getOrRecompute(workspaceId, [
-        'flatFieldPermissionMaps',
-      ] as unknown as Parameters<
-        WorkspaceCacheService['getOrRecompute']
-      >[1])) as unknown as { flatFieldPermissionMaps: FlatFieldPermissionMaps }
-    ).flatFieldPermissionMaps;
+    const { flatFieldPermissionMaps: freshFlatFieldPermissionMaps } =
+      await this.workspaceManyOrAllFlatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatFieldPermissionMaps'],
+        },
+      );
 
     const resultFieldPermissions = Object.values(
       freshFlatFieldPermissionMaps.byUniversalIdentifier,
