@@ -210,6 +210,135 @@ describe('Field permission upsert should succeed', () => {
     });
   });
 
+  it('should return the existing row unchanged when the input matches it', async () => {
+    const restriction = {
+      objectMetadataId: customObjectMetadataId,
+      fieldMetadataId: oneFieldMetadataId,
+      canReadFieldValue: false,
+      canUpdateFieldValue: false,
+    };
+
+    const { data: firstData } = await upsertFieldPermissions({
+      expectToFail: false,
+      input: { roleId: createdRoleId, fieldPermissions: [restriction] },
+    });
+    const { data: secondData } = await upsertFieldPermissions({
+      expectToFail: false,
+      input: { roleId: createdRoleId, fieldPermissions: [restriction] },
+    });
+
+    expect(secondData?.upsertFieldPermissions).toHaveLength(1);
+    expect(secondData?.upsertFieldPermissions?.[0]?.id).toBe(
+      firstData?.upsertFieldPermissions?.[0]?.id,
+    );
+  });
+
+  it('should update the row when a value changes and keep values that are left out', async () => {
+    await upsertFieldPermissions({
+      expectToFail: false,
+      input: {
+        roleId: createdRoleId,
+        fieldPermissions: [
+          {
+            objectMetadataId: customObjectMetadataId,
+            fieldMetadataId: oneFieldMetadataId,
+            canReadFieldValue: false,
+            canUpdateFieldValue: null,
+          },
+        ],
+      },
+    });
+
+    const { data } = await upsertFieldPermissions({
+      expectToFail: false,
+      input: {
+        roleId: createdRoleId,
+        fieldPermissions: [
+          {
+            objectMetadataId: customObjectMetadataId,
+            fieldMetadataId: oneFieldMetadataId,
+            canUpdateFieldValue: false,
+          },
+        ],
+      },
+    });
+
+    expect(data?.upsertFieldPermissions).toHaveLength(1);
+    expect(data?.upsertFieldPermissions?.[0]).toMatchObject({
+      objectMetadataId: customObjectMetadataId,
+      fieldMetadataId: oneFieldMetadataId,
+      canReadFieldValue: false,
+      canUpdateFieldValue: false,
+    });
+  });
+
+  it('should delete the whole row when the only value sent is null', async () => {
+    await upsertFieldPermissions({
+      expectToFail: false,
+      input: {
+        roleId: createdRoleId,
+        fieldPermissions: [
+          {
+            objectMetadataId: customObjectMetadataId,
+            fieldMetadataId: oneFieldMetadataId,
+            canReadFieldValue: false,
+            canUpdateFieldValue: false,
+          },
+        ],
+      },
+    });
+
+    const { data } = await upsertFieldPermissions({
+      expectToFail: false,
+      input: {
+        roleId: createdRoleId,
+        fieldPermissions: [
+          {
+            objectMetadataId: customObjectMetadataId,
+            fieldMetadataId: oneFieldMetadataId,
+            canUpdateFieldValue: null,
+          },
+        ],
+      },
+    });
+
+    expect(data?.upsertFieldPermissions).toHaveLength(0);
+  });
+
+  it('should delete the row when both values are cleared', async () => {
+    await upsertFieldPermissions({
+      expectToFail: false,
+      input: {
+        roleId: createdRoleId,
+        fieldPermissions: [
+          {
+            objectMetadataId: customObjectMetadataId,
+            fieldMetadataId: oneFieldMetadataId,
+            canReadFieldValue: false,
+            canUpdateFieldValue: false,
+          },
+        ],
+      },
+    });
+
+    const { data } = await upsertFieldPermissions({
+      expectToFail: false,
+      input: {
+        roleId: createdRoleId,
+        fieldPermissions: [
+          {
+            objectMetadataId: customObjectMetadataId,
+            fieldMetadataId: oneFieldMetadataId,
+            canReadFieldValue: null,
+            canUpdateFieldValue: null,
+          },
+        ],
+      },
+    });
+
+    expect(data?.upsertFieldPermissions).toHaveLength(0);
+  });
+
   it('should upsert even when object permission is not found for role on object', async () => {
     const { data } = await upsertFieldPermissions({
       expectToFail: false,

@@ -238,4 +238,63 @@ describe('Relation field permission grant-back', () => {
       expect(await findFieldPermissionsForRole()).toHaveLength(0);
     });
   });
+
+  describe('when both sides of the relation are in the same input', () => {
+    afterEach(async () => {
+      await grantBackField({
+        objectMetadataId: sourceObjectMetadataId,
+        fieldMetadataId: relationFieldMetadataId,
+      });
+    });
+
+    it('should save both rows when the two sides match', async () => {
+      const { data } = await upsertFieldPermissions({
+        expectToFail: false,
+        input: {
+          roleId: createdRoleId,
+          fieldPermissions: [
+            {
+              objectMetadataId: sourceObjectMetadataId,
+              fieldMetadataId: relationFieldMetadataId,
+              canUpdateFieldValue: false,
+            },
+            {
+              objectMetadataId: targetObjectMetadataId,
+              fieldMetadataId: inverseRelationFieldMetadataId,
+              canUpdateFieldValue: false,
+            },
+          ],
+        },
+      });
+
+      expect(data?.upsertFieldPermissions).toHaveLength(2);
+    });
+
+    it('should fail without saving anything when the two sides conflict', async () => {
+      const { errors } = await upsertFieldPermissions({
+        expectToFail: true,
+        input: {
+          roleId: createdRoleId,
+          fieldPermissions: [
+            {
+              objectMetadataId: sourceObjectMetadataId,
+              fieldMetadataId: relationFieldMetadataId,
+              canUpdateFieldValue: false,
+            },
+            {
+              objectMetadataId: targetObjectMetadataId,
+              fieldMetadataId: inverseRelationFieldMetadataId,
+              canReadFieldValue: false,
+              canUpdateFieldValue: false,
+            },
+          ],
+        },
+      });
+
+      expect(errors?.[0]?.message).toBe(
+        'Conflicting field permissions found for relation target field',
+      );
+      expect(await findFieldPermissionsForRole()).toHaveLength(0);
+    });
+  });
 });

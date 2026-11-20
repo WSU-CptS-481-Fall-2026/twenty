@@ -27,6 +27,7 @@ type GlobalTestContext = {
 
 type TestContext = {
   input: (globalContext: GlobalTestContext) => UpsertFieldPermissionsInput;
+  normalizeMessage?: (message: string) => string;
 };
 
 const failingFieldPermissionUpsertTestCases: EachTestingContext<TestContext>[] =
@@ -154,6 +155,30 @@ const failingFieldPermissionUpsertTestCases: EachTestingContext<TestContext>[] =
               fieldMetadataId: globalContext.oneFieldMetadataId,
               canReadFieldValue: false,
               canUpdateFieldValue: true,
+            },
+          ],
+        }),
+      },
+    },
+    {
+      title: 'when the same field appears twice in the input',
+      context: {
+        normalizeMessage: (message: string) =>
+          message.replace(/field [0-9a-f-]{36}/, 'field {fieldMetadataId}'),
+        input: (globalContext: GlobalTestContext) => ({
+          roleId: globalContext.editableRoleId,
+          fieldPermissions: [
+            {
+              objectMetadataId: globalContext.nonSystemObjectMetadataId,
+              fieldMetadataId: globalContext.oneFieldMetadataId,
+              canReadFieldValue: false,
+              canUpdateFieldValue: false,
+            },
+            {
+              objectMetadataId: globalContext.nonSystemObjectMetadataId,
+              fieldMetadataId: globalContext.oneFieldMetadataId,
+              canReadFieldValue: false,
+              canUpdateFieldValue: false,
             },
           ],
         }),
@@ -302,6 +327,7 @@ describe('Field permission upsert should fail', () => {
 
       expectOneNotInternalServerErrorSnapshot({
         errors,
+        normalizeMessage: context.normalizeMessage,
       });
     },
   );

@@ -129,3 +129,14 @@ exports[`Field permission upsert should fail when roleId is not a valid UUID 1`]
   "name": "ValidationError",
 }
 `;
+
+exports[`Field permission upsert should fail when the same field appears twice in the input 1`] = `
+{
+  "extensions": {
+    "code": "BAD_USER_INPUT",
+    "userFriendlyMessage": "An error occurred.",
+  },
+  "message": "Cannot accept more than one fieldPermission for field {fieldMetadataId} in input.",
+  "name": "UserInputError",
+}
+`;
