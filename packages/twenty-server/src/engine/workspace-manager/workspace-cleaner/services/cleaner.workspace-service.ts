@@ -92,9 +92,7 @@ export class CleanerWorkspaceService {
       );
   }
 
-  async computeDaysSinceSuspended(
-    workspace: WorkspaceEntity,
-  ): Promise<number | null> {
+  private computeDaysSinceSuspended(workspace: WorkspaceEntity): number | null {
     if (isDefined(workspace.suspendedAt)) {
       return differenceInDays(new Date(), workspace.suspendedAt);
     }
@@ -102,7 +100,7 @@ export class CleanerWorkspaceService {
     return null;
   }
 
-  async sendWarningEmail(
+  private async sendWarningEmail(
     workspaceMember: WorkspaceMemberWorkspaceEntity,
     workspaceDisplayName: string | undefined,
     billingSettingsUrl: string,
@@ -139,7 +137,7 @@ export class CleanerWorkspaceService {
     });
   }
 
-  async warnWorkspaceMembers(
+  private async warnWorkspaceMembers(
     workspace: WorkspaceEntity,
     daysSinceInactive: number,
     dryRun: boolean,
@@ -181,7 +179,7 @@ export class CleanerWorkspaceService {
     }
   }
 
-  async sendCleaningEmail(
+  private async sendCleaningEmail(
     workspaceMember: WorkspaceMemberWorkspaceEntity,
     workspaceDisplayName: string,
     daysSinceInactive: number,
@@ -211,7 +209,7 @@ export class CleanerWorkspaceService {
     });
   }
 
-  async informWorkspaceMembersAndSoftDeleteWorkspace(
+  private async informWorkspaceMembersAndSoftDeleteWorkspace(
     workspace: WorkspaceEntity,
     daysSinceInactive: number,
     dryRun: boolean,
@@ -332,7 +330,7 @@ export class CleanerWorkspaceService {
     }
   }
 
-  async destroySoftDeletedWorkspace({
+  private async destroySoftDeletedWorkspace({
     workspace,
     ignoreGracePeriod = false,
     dryRun = false,
@@ -439,7 +437,7 @@ export class CleanerWorkspaceService {
         }
 
         const inactiveDaysSinceSuspended =
-          await this.computeDaysSinceSuspended(workspace);
+          this.computeDaysSinceSuspended(workspace);
 
         if (inactiveDaysSinceSuspended === null) {
           continue;
