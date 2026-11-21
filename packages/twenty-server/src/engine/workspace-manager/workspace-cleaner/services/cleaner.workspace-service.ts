@@ -115,25 +115,15 @@ export class CleanerWorkspaceService {
       locale: workspaceMember.locale,
     };
     const emailTemplate = WarnSuspendedWorkspaceEmail(emailData);
-    const html = await renderEmail(emailTemplate, { pretty: true });
-    const text = await renderEmail(emailTemplate, { plainText: true });
 
     const workspaceDeletionMsg = msg`Your workspace is paused — reactivate to keep your data`;
     const i18n = this.i18nService.getI18nInstance(workspaceMember.locale);
     const subject = i18n._(workspaceDeletionMsg);
 
-    if (!isDefined(workspaceMember.userEmail)) {
-      throw new Error('Workspace member email is missing');
-    }
-
-    await this.emailService.send({
-      to: workspaceMember.userEmail,
-      from: `${this.twentyConfigService.get(
-        'EMAIL_FROM_NAME',
-      )} <${this.twentyConfigService.get('EMAIL_FROM_ADDRESS')}>`,
+    await this.sendEmailToWorkspaceMember({
+      workspaceMember,
+      emailTemplate,
       subject,
-      html,
-      text,
     });
   }
 
@@ -193,6 +183,23 @@ export class CleanerWorkspaceService {
       locale: workspaceMember.locale,
     };
     const emailTemplate = CleanSuspendedWorkspaceEmail(emailData);
+
+    await this.sendEmailToWorkspaceMember({
+      workspaceMember,
+      emailTemplate,
+      subject: 'Your workspace has been deleted',
+    });
+  }
+
+  private async sendEmailToWorkspaceMember({
+    workspaceMember,
+    emailTemplate,
+    subject,
+  }: {
+    workspaceMember: WorkspaceMemberWorkspaceEntity;
+    emailTemplate: Parameters<typeof renderEmail>[0];
+    subject: string;
+  }) {
     const html = await renderEmail(emailTemplate, { pretty: true });
     const text = await renderEmail(emailTemplate, { plainText: true });
 
@@ -205,7 +212,7 @@ export class CleanerWorkspaceService {
       from: `${this.twentyConfigService.get(
         'EMAIL_FROM_NAME',
       )} <${this.twentyConfigService.get('EMAIL_FROM_ADDRESS')}>`,
-      subject: 'Your workspace has been deleted',
+      subject,
       html,
       text,
     });
