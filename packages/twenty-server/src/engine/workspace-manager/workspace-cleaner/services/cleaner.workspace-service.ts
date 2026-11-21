@@ -293,56 +293,74 @@ export class CleanerWorkspaceService {
       withDeleted: true,
     });
 
-    if (workspaces.length !== 0) {
-      for (const workspace of workspaces) {
-        if (!isDefined(workspace.deletedAt)) {
-          this.logger.log(
-            `${dryRunPrefix}Soft deleting onboarding workspace ${workspace.id}`,
-          );
+    if (workspaces.length === 0) {
+      return;
+    }
 
-          if (!dryRun) {
-            const userWorkspaces = await this.userWorkspaceRepository.find({
-              where: {
-                workspaceId: workspace.id,
-              },
-              withDeleted: true,
-            });
+    for (const workspace of workspaces) {
+      if (!isDefined(workspace.deletedAt)) {
+        await this.softDeleteOnboardingWorkspace(workspace, dryRun);
+      } else {
+        await this.hardDeleteOnboardingWorkspace(workspace, dryRun);
+      }
+    }
 
-            for (const userWorkspace of userWorkspaces) {
-              await this.workspaceService.handleRemoveWorkspaceMember(
-                workspace.id,
-                userWorkspace.userId,
-              );
-            }
+    this.logger.log(
+      `${dryRunPrefix}batchCleanOnboardingWorkspaces done with ${workspaces.length} workspaces!`,
+    );
+  }
 
-            if (this.twentyConfigService.get('IS_BILLING_ENABLED')) {
-              await this.billingSubscriptionService.cancelSubscription(
-                workspace.id,
-              );
-            }
+  private async softDeleteOnboardingWorkspace(
+    workspace: WorkspaceEntity,
+    dryRun: boolean,
+  ): Promise<void> {
+    const dryRunPrefix = dryRun ? 'DRY RUN - ' : '';
 
-            await this.workspaceService.deleteWorkspace(workspace.id, true);
-          }
-        } else {
-          if (this.twentyConfigService.get('IS_BILLING_ENABLED')) {
-            await this.billingSubscriptionService.assertSubscriptionCanceledOrNone(
-              workspace.id,
-            );
-          }
+    this.logger.log(
+      `${dryRunPrefix}Soft deleting onboarding workspace ${workspace.id}`,
+    );
 
-          this.logger.log(
-            `${dryRunPrefix}Hard deleting onboarding workspace ${workspace.id}`,
-          );
+    if (!dryRun) {
+      const userWorkspaces = await this.userWorkspaceRepository.find({
+        where: {
+          workspaceId: workspace.id,
+        },
+        withDeleted: true,
+      });
 
-          if (!dryRun) {
-            await this.workspaceService.deleteWorkspace(workspace.id);
-          }
-        }
+      for (const userWorkspace of userWorkspaces) {
+        await this.workspaceService.handleRemoveWorkspaceMember(
+          workspace.id,
+          userWorkspace.userId,
+        );
       }
 
-      this.logger.log(
-        `${dryRunPrefix}batchCleanOnboardingWorkspaces done with ${workspaces.length} workspaces!`,
+      if (this.twentyConfigService.get('IS_BILLING_ENABLED')) {
+        await this.billingSubscriptionService.cancelSubscription(workspace.id);
+      }
+
+      await this.workspaceService.deleteWorkspace(workspace.id, true);
+    }
+  }
+
+  private async hardDeleteOnboardingWorkspace(
+    workspace: WorkspaceEntity,
+    dryRun: boolean,
+  ): Promise<void> {
+    const dryRunPrefix = dryRun ? 'DRY RUN - ' : '';
+
+    if (this.twentyConfigService.get('IS_BILLING_ENABLED')) {
+      await this.billingSubscriptionService.assertSubscriptionCanceledOrNone(
+        workspace.id,
       );
+    }
+
+    this.logger.log(
+      `${dryRunPrefix}Hard deleting onboarding workspace ${workspace.id}`,
+    );
+
+    if (!dryRun) {
+      await this.workspaceService.deleteWorkspace(workspace.id);
     }
   }
 
