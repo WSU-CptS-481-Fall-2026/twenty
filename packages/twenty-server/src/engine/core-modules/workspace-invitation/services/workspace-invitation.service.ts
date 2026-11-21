@@ -135,25 +135,6 @@ export class WorkspaceInvitationService {
     });
   }
 
-  async getAppTokenByInvitationToken(invitationToken: string) {
-    const appToken = await this.appTokenRepository.findOne({
-      where: {
-        value: invitationToken,
-        type: In(INVITATION_APP_TOKEN_TYPES),
-      },
-      relations: { workspace: true },
-    });
-
-    if (!appToken) {
-      throw new WorkspaceInvitationException(
-        'Invalid invitation token',
-        WorkspaceInvitationExceptionCode.INVALID_INVITATION,
-      );
-    }
-
-    return appToken;
-  }
-
   async loadWorkspaceInvitations(workspace: WorkspaceEntity) {
     const appTokens = await this.appTokenRepository.find({
       where: {
@@ -169,7 +150,7 @@ export class WorkspaceInvitationService {
     return appTokens.map(castAppTokenToWorkspaceInvitationUtil);
   }
 
-  async createWorkspaceInvitation(
+  private async createWorkspaceInvitation(
     email: string,
     workspace: WorkspaceEntity,
     roleId?: string,
@@ -457,7 +438,7 @@ export class WorkspaceInvitationService {
     };
   }
 
-  async generateInvitationToken(
+  private async generateInvitationToken(
     workspaceId: string,
     email: string,
     roleId?: string,
