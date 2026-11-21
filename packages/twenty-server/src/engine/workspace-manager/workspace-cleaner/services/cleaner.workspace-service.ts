@@ -142,11 +142,13 @@ export class CleanerWorkspaceService {
     daysSinceInactive: number,
     dryRun: boolean,
   ) {
+    const dryRunPrefix = dryRun ? 'DRY RUN - ' : '';
+
     const workspaceMembers =
       await this.userService.loadWorkspaceMembers(workspace);
 
     this.logger.log(
-      `${dryRun ? 'DRY RUN - ' : ''}Sending ${workspace.id} ${
+      `${dryRunPrefix}Sending ${workspace.id} ${
         workspace.displayName
       } suspended since ${daysSinceInactive} days emails to users ['${workspaceMembers
         .map((workspaceUser) => workspaceUser.userId)
@@ -214,9 +216,11 @@ export class CleanerWorkspaceService {
     daysSinceInactive: number,
     dryRun: boolean,
   ) {
+    const dryRunPrefix = dryRun ? 'DRY RUN - ' : '';
+
     if (isDefined(workspace.deletedAt)) {
       this.logger.log(
-        `${dryRun ? 'DRY RUN - ' : ''}Workspace ${workspace.id} ${
+        `${dryRunPrefix}Workspace ${workspace.id} ${
           workspace.displayName
         } already soft deleted`,
       );
@@ -228,7 +232,7 @@ export class CleanerWorkspaceService {
       await this.userService.loadWorkspaceMembers(workspace);
 
     this.logger.log(
-      `${dryRun ? 'DRY RUN - ' : ''}Sending workspace ${workspace.id} ${
+      `${dryRunPrefix}Sending workspace ${workspace.id} ${
         workspace.displayName
       } deletion emails to users ['${workspaceMembers
         .map((workspaceUser) => workspaceUser.userId)
@@ -253,7 +257,7 @@ export class CleanerWorkspaceService {
       await this.workspaceService.deleteWorkspace(workspace.id, true);
     }
     this.logger.log(
-      `${dryRun ? 'DRY RUN - ' : ''}Soft deleting Workspace ${workspace.id} ${workspace.displayName}`,
+      `${dryRunPrefix}Soft deleting Workspace ${workspace.id} ${workspace.displayName}`,
     );
   }
 
@@ -261,9 +265,9 @@ export class CleanerWorkspaceService {
     workspaceIds: string[],
     dryRun = false,
   ): Promise<void> {
-    this.logger.log(
-      `${dryRun ? 'DRY RUN - ' : ''}batchCleanOnboardingWorkspaces running...`,
-    );
+    const dryRunPrefix = dryRun ? 'DRY RUN - ' : '';
+
+    this.logger.log(`${dryRunPrefix}batchCleanOnboardingWorkspaces running...`);
 
     const workspaces = await this.workspaceRepository.find({
       where: {
@@ -281,7 +285,7 @@ export class CleanerWorkspaceService {
       for (const workspace of workspaces) {
         if (!isDefined(workspace.deletedAt)) {
           this.logger.log(
-            `${dryRun ? 'DRY RUN - ' : ''}Soft deleting onboarding workspace ${workspace.id}`,
+            `${dryRunPrefix}Soft deleting onboarding workspace ${workspace.id}`,
           );
 
           if (!dryRun) {
@@ -315,7 +319,7 @@ export class CleanerWorkspaceService {
           }
 
           this.logger.log(
-            `${dryRun ? 'DRY RUN - ' : ''}Hard deleting onboarding workspace ${workspace.id}`,
+            `${dryRunPrefix}Hard deleting onboarding workspace ${workspace.id}`,
           );
 
           if (!dryRun) {
@@ -325,7 +329,7 @@ export class CleanerWorkspaceService {
       }
 
       this.logger.log(
-        `${dryRun ? 'DRY RUN - ' : ''}batchCleanOnboardingWorkspaces done with ${workspaces.length} workspaces!`,
+        `${dryRunPrefix}batchCleanOnboardingWorkspaces done with ${workspaces.length} workspaces!`,
       );
     }
   }
@@ -339,6 +343,8 @@ export class CleanerWorkspaceService {
     dryRun?: boolean;
     workspace: WorkspaceEntity;
   }): Promise<WorkspaceEntity | undefined> {
+    const dryRunPrefix = dryRun ? 'DRY RUN - ' : '';
+
     if (!isDefined(workspace.deletedAt)) {
       return;
     }
@@ -358,7 +364,7 @@ export class CleanerWorkspaceService {
     }
 
     this.logger.log(
-      `${dryRun ? 'DRY RUN - ' : ''}Destroying workspace ${workspace.id} ${workspace.displayName}`,
+      `${dryRunPrefix}Destroying workspace ${workspace.id} ${workspace.displayName}`,
     );
     if (dryRun) {
       return;
@@ -379,8 +385,10 @@ export class CleanerWorkspaceService {
     ignoreDestroyGracePeriod = false,
     onlyOperation,
   }: CleanSuspendedWorkspacesOptions): Promise<void> {
+    const dryRunPrefix = dryRun ? 'DRY RUN - ' : '';
+
     this.logger.log(
-      `${dryRun ? 'DRY RUN - ' : ''}batchWarnOrCleanSuspendedWorkspaces running...`,
+      `${dryRunPrefix}batchWarnOrCleanSuspendedWorkspaces running...`,
     );
 
     const workspaces = await this.workspaceRepository.find({
@@ -407,7 +415,7 @@ export class CleanerWorkspaceService {
 
     for (const [index, workspace] of workspaces.entries()) {
       this.logger.log(
-        `${dryRun ? 'DRY RUN - ' : ''}Processing workspace ${workspace.id} - ${index + 1}/${workspaces.length}`,
+        `${dryRunPrefix}Processing workspace ${workspace.id} - ${index + 1}/${workspaces.length}`,
       );
 
       try {
@@ -474,17 +482,17 @@ export class CleanerWorkspaceService {
         );
       }
     }
-    this.logger.log(
-      `${dryRun ? 'DRY RUN - ' : ''}batchWarnOrCleanSuspendedWorkspaces done!`,
-    );
+    this.logger.log(`${dryRunPrefix}batchWarnOrCleanSuspendedWorkspaces done!`);
   }
 
   async destroyBillingDeactivatedAndSoftDeletedWorkspaces(
     workspaceIds: string[],
     dryRun = false,
   ): Promise<void> {
+    const dryRunPrefix = dryRun ? 'DRY RUN - ' : '';
+
     this.logger.log(
-      `${dryRun ? 'DRY RUN - ' : ''}destroyBillingDeactivatedAndSoftDeletedWorkspaces running...`,
+      `${dryRunPrefix}destroyBillingDeactivatedAndSoftDeletedWorkspaces running...`,
     );
 
     const workspaces = await this.workspaceRepository.find({
@@ -497,7 +505,7 @@ export class CleanerWorkspaceService {
     for (const workspace of workspaces) {
       if (!isDefined(workspace.deletedAt)) {
         this.logger.warn(
-          `${dryRun ? 'DRY RUN - ' : ''}Workspace ${workspace.id} is not soft deleted, skipping`,
+          `${dryRunPrefix}Workspace ${workspace.id} is not soft deleted, skipping`,
         );
 
         continue;
@@ -516,24 +524,20 @@ export class CleanerWorkspaceService {
 
         if (isDefined(activeBillingSubscription)) {
           this.logger.warn(
-            `${dryRun ? 'DRY RUN - ' : ''}Workspace ${workspace.id} has an active billing subscription, skipping`,
+            `${dryRunPrefix}Workspace ${workspace.id} has an active billing subscription, skipping`,
           );
 
           continue;
         }
       }
 
-      this.logger.log(
-        `${dryRun ? 'DRY RUN - ' : ''}Destroying workspace ${workspace.id}`,
-      );
+      this.logger.log(`${dryRunPrefix}Destroying workspace ${workspace.id}`);
 
       if (!dryRun) {
         await this.workspaceService.deleteWorkspace(workspace.id);
       }
 
-      this.logger.log(
-        `${dryRun ? 'DRY RUN - ' : ''}Destroyed workspace ${workspace.id}`,
-      );
+      this.logger.log(`${dryRunPrefix}Destroyed workspace ${workspace.id}`);
     }
   }
 }
