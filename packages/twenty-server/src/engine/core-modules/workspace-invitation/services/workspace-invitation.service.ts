@@ -159,12 +159,12 @@ export class WorkspaceInvitationService {
     roleId?: string,
     isOnboardingInvitation = false,
   ) {
-    const maybeWorkspaceInvitation = await this.getOneWorkspaceInvitation(
+    const existingWorkspaceInvitation = await this.getOneWorkspaceInvitation(
       workspace.id,
       email,
     );
 
-    if (maybeWorkspaceInvitation) {
+    if (existingWorkspaceInvitation) {
       throw new WorkspaceInvitationException(
         `${email} already invited`,
         WorkspaceInvitationExceptionCode.INVITATION_ALREADY_EXIST,
@@ -197,7 +197,7 @@ export class WorkspaceInvitationService {
       context: invitationEmailMatches(email),
     });
 
-    return this.generateInvitationToken(
+    return this.createInvitationAppToken(
       workspace.id,
       email,
       roleId,
@@ -279,7 +279,7 @@ export class WorkspaceInvitationService {
     isOnboardingInviteRewardOverride?: boolean;
     appTokenIdToInvalidate?: string;
   }): Promise<SendInvitationsDTO> {
-    if (!workspace?.inviteHash) {
+    if (!workspace.inviteHash) {
       return {
         success: false,
         errors: ['Workspace invite hash not found'],
@@ -387,7 +387,7 @@ export class WorkspaceInvitationService {
   ): SendInvitationsDTO {
     const i18n = this.i18nService.getI18nInstance(locale);
 
-    const result = invitationResults.reduce<{
+    const invitationOutcomes = invitationResults.reduce<{
       errors: string[];
       result: ReturnType<typeof castAppTokenToWorkspaceInvitationUtil>[];
     }>(
@@ -412,8 +412,8 @@ export class WorkspaceInvitationService {
     );
 
     return {
-      success: result.errors.length === 0,
-      ...result,
+      success: invitationOutcomes.errors.length === 0,
+      ...invitationOutcomes,
     };
   }
 
@@ -488,7 +488,7 @@ export class WorkspaceInvitationService {
     });
   }
 
-  private async generateInvitationToken(
+  private async createInvitationAppToken(
     workspaceId: string,
     email: string,
     roleId?: string,
