@@ -71,7 +71,7 @@ import { UserEntity } from 'src/engine/core-modules/user/user.entity';
 import { WorkspaceInvitationService } from 'src/engine/core-modules/workspace-invitation/services/workspace-invitation.service';
 import { AuthProviderEnum } from 'src/engine/core-modules/workspace/types/workspace.type';
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
-import { workspaceValidator } from 'src/engine/core-modules/workspace/workspace.validate';
+import { workspaceValidator } from 'src/engine/core-modules/workspace/workspace.vparamsalidate';
 import { assertIssuerIsPublishedOrThrow } from 'src/engine/core-modules/auth/utils/assert-issuer-is-published.util';
 import { PermissionsService } from 'src/engine/metadata-modules/permissions/permissions.service';
 import { isEmailInApprovedAccessDomains } from 'src/engine/core-modules/approved-access-domain/utils/is-email-in-approved-access-domains.util';
@@ -337,25 +337,25 @@ export class AuthService {
 
   //DIFFERENT SERVICE
   async signInUp(
-    params: SignInUpBaseParams &
+    programInfo: SignInUpBaseParams &
       ExistingUserOrNewUser &
       AuthProviderWithPasswordType,
   ) {
     await this.isAuthProviderEnabledOrThrow(
-      params.userData,
-      params.authParams,
-      params.workspace,
+      programInfo.userData,
+      programInfo.authParams,
+      programInfo.workspace,
     );
 
-    if (params.userData.type === 'newUser') {
+    if (programInfo.userData.type === 'newUser') {
       const partialUserWithPicture =
         await this.signInUpService.computePartialUserFromUserPayload(
-          params.userData.newUserPayload,
-          params.authParams,
+          programInfo.userData.newUserPayload,
+          programInfo.authParams,
         );
 
       return await this.signInUpService.signInUp({
-        ...params,
+        ...programInfo,
         userData: {
           type: 'newUserWithPicture',
           newUserWithPicture: partialUserWithPicture,
@@ -364,10 +364,10 @@ export class AuthService {
     }
 
     return await this.signInUpService.signInUp({
-      ...params,
+      ...programInfo,
       userData: {
         type: 'existingUser',
-        existingUser: params.userData.existingUser,
+        existingUser: programInfo.userData.existingUser,
       },
     });
   }
@@ -428,13 +428,13 @@ export class AuthService {
   async checkUserExists(email: string): Promise<CheckUserExistDTO> {
     const user = await this.userService.findUserByEmail(email);
 
-    const isUserExist = isDefined(user);
+    const result = isDefined(user);
 
     return {
-      exists: isUserExist,
+      exists: result,
       availableWorkspacesCount:
         await this.countAvailableWorkspacesByEmail(email),
-      isEmailVerified: isUserExist ? user.isEmailVerified : false,
+      isEmailVerified: result ? user.isEmailVerified : false,
     };
   }
 
@@ -472,9 +472,9 @@ export class AuthService {
       );
     }
 
-    const [firstUserWorkspace] = user.userWorkspaces;
+    const [curWorkSpace] = user.userWorkspaces;
 
-    if (!firstUserWorkspace) {
+    if (!curWorkSpace) {
       throw new AuthException(
         'User does not have a workspace',
         AuthExceptionCode.USER_WORKSPACE_NOT_FOUND,
@@ -519,14 +519,14 @@ export class AuthService {
       userName: `${user.firstName} ${user.lastName}`,
       email: user.email,
       link: this.domainServerConfigService.getBaseUrl().toString(),
-      locale: firstUserWorkspace.locale,
+      locale: curWorkSpace.locale,
     });
 
     const html = await renderEmail(emailTemplate, { pretty: true });
     const text = await renderEmail(emailTemplate, { plainText: true });
 
     const passwordChangedMsg = msg`Your Password Has Been Successfully Changed`;
-    const i18n = this.i18nService.getI18nInstance(firstUserWorkspace.locale);
+    const i18n = this.i18nService.getI18nInstance(curWorkSpace.locale);
     const subject = i18n._(passwordChangedMsg);
 
     await this.emailService.send({
@@ -542,7 +542,6 @@ export class AuthService {
     return { success: true };
   }
 
-  //DIFFERENT SERVICE
   async findWorkspaceFromInviteHashOrFail(
     inviteHash: string,
   ): Promise<WorkspaceEntity> {
@@ -596,7 +595,7 @@ export class AuthService {
       currentWorkspace: WorkspaceEntity;
     } & ({ workspacePersonalInviteToken: string } | { email: string }),
   ) {
-    const qr = this.appTokenRepository
+    const invitationQuery = this.appTokenRepository
       .createQueryBuilder('appToken')
       .where('"appToken"."workspaceId" = :workspaceId', {
         workspaceId: params.currentWorkspace.id,
@@ -610,18 +609,21 @@ export class AuthService {
       });
 
     if ('workspacePersonalInviteToken' in params) {
-      qr.andWhere('"appToken".value = :personalInviteToken', {
+      invitationQuery.andWhere('"appToken".value = :personalInviteToken', {
         personalInviteToken: params.workspacePersonalInviteToken,
       });
     }
 
     if ('email' in params) {
-      qr.andWhere('lower("appToken".context->>\'email\') = lower(:email)', {
-        email: params.email,
-      });
+      invitationQuery.andWhere(
+        'lower("appToken".context->>\'email\') = lower(:email)',
+        {
+          email: params.email,
+        },
+      );
     }
 
-    return (await qr.getOne()) ?? undefined;
+    return (await invitationQuery.getOne()) ?? undefined;
   }
 
   //DIFFERENT SERVICE
