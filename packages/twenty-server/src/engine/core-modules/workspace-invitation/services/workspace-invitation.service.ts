@@ -338,63 +338,12 @@ export class WorkspaceInvitationService {
 
     for (const invitation of invitationResults) {
       if (invitation.status === 'fulfilled') {
-        const link = this.workspaceDomainsService.buildWorkspaceURL({
+        await this.sendInvitationEmail({
           workspace,
-          pathname: getAppPath(AppPath.Invite, {
-            workspaceInviteHash: workspace?.inviteHash,
-          }),
-          searchParams: {
-            inviteToken: invitation.value.appToken.value,
-            email: invitation.value.email,
-          },
-        });
-
-        if (!isDefined(sender.userEmail)) {
-          throw new WorkspaceInvitationException(
-            'Sender email is missing',
-            WorkspaceInvitationExceptionCode.EMAIL_MISSING,
-          );
-        }
-
-        const logo = isDefined(workspace.logoFileId)
-          ? await this.fileUrlService.signFileByIdUrl({
-              fileId: workspace.logoFileId,
-              workspaceId: workspace.id,
-              fileFolder: FileFolder.CorePicture,
-            })
-          : undefined;
-
-        const emailData = {
-          link: link.toString(),
-          workspace: {
-            name: workspace.displayName,
-            logo,
-          },
-          sender: {
-            email: sender.userEmail,
-            firstName: sender.name.firstName,
-            lastName: sender.name.lastName,
-          },
-          serverUrl: this.twentyConfigService.get('SERVER_URL'),
-          locale: sender.locale,
-        };
-
-        const emailTemplate = SendInviteLinkEmail(emailData);
-        const html = await renderEmail(emailTemplate);
-        const text = await renderEmail(emailTemplate, {
-          plainText: true,
-        });
-
-        const joinTeamMsg = msg`Join your team on Twenty`;
-        const i18n = this.i18nService.getI18nInstance(sender.locale);
-        const subject = i18n._(joinTeamMsg);
-
-        await this.emailService.send({
-          from: `${sender.name.firstName} ${sender.name.lastName} (via Twenty) <${this.twentyConfigService.get('EMAIL_FROM_ADDRESS')}>`,
-          to: invitation.value.email,
-          subject,
-          text,
-          html,
+          workspaceInviteHash: workspace.inviteHash,
+          sender,
+          appToken: invitation.value.appToken,
+          email: invitation.value.email,
         });
       }
     }
@@ -437,6 +386,77 @@ export class WorkspaceInvitationService {
       success: result.errors.length === 0,
       ...result,
     };
+  }
+
+  private async sendInvitationEmail({
+    workspace,
+    workspaceInviteHash,
+    sender,
+    appToken,
+    email,
+  }: {
+    workspace: WorkspaceEntity;
+    workspaceInviteHash: string;
+    sender: WorkspaceMemberWorkspaceEntity;
+    appToken: AppTokenEntity;
+    email: string;
+  }) {
+    const link = this.workspaceDomainsService.buildWorkspaceURL({
+      workspace,
+      pathname: getAppPath(AppPath.Invite, { workspaceInviteHash }),
+      searchParams: {
+        inviteToken: appToken.value,
+        email,
+      },
+    });
+
+    if (!isDefined(sender.userEmail)) {
+      throw new WorkspaceInvitationException(
+        'Sender email is missing',
+        WorkspaceInvitationExceptionCode.EMAIL_MISSING,
+      );
+    }
+
+    const logo = isDefined(workspace.logoFileId)
+      ? await this.fileUrlService.signFileByIdUrl({
+          fileId: workspace.logoFileId,
+          workspaceId: workspace.id,
+          fileFolder: FileFolder.CorePicture,
+        })
+      : undefined;
+
+    const emailData = {
+      link: link.toString(),
+      workspace: {
+        name: workspace.displayName,
+        logo,
+      },
+      sender: {
+        email: sender.userEmail,
+        firstName: sender.name.firstName,
+        lastName: sender.name.lastName,
+      },
+      serverUrl: this.twentyConfigService.get('SERVER_URL'),
+      locale: sender.locale,
+    };
+
+    const emailTemplate = SendInviteLinkEmail(emailData);
+    const html = await renderEmail(emailTemplate);
+    const text = await renderEmail(emailTemplate, {
+      plainText: true,
+    });
+
+    const joinTeamMsg = msg`Join your team on Twenty`;
+    const i18n = this.i18nService.getI18nInstance(sender.locale);
+    const subject = i18n._(joinTeamMsg);
+
+    await this.emailService.send({
+      from: `${sender.name.firstName} ${sender.name.lastName} (via Twenty) <${this.twentyConfigService.get('EMAIL_FROM_ADDRESS')}>`,
+      to: email,
+      subject,
+      text,
+      html,
+    });
   }
 
   private async generateInvitationToken(
