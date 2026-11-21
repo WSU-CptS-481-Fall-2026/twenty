@@ -5,6 +5,7 @@ import {
   type ImportedStructuredRow,
   type SpreadsheetImportField,
 } from '@/spreadsheet-import/types';
+import { type FieldMetadataSettings } from 'twenty-shared/types';
 import { FieldMetadataType, RelationType } from '~/generated-metadata/graphql';
 
 describe('buildRecordFromImportedStructuredRow', () => {
@@ -456,6 +457,156 @@ describe('buildRecordFromImportedStructuredRow', () => {
       },
     });
   });
+
+  it.each([
+    {
+      description: 'a national phone number with a country code',
+      importedStructuredRow: {
+        'Primary Phone Number (phoneField)': '020 7946 0958',
+        'Primary Phone Country Code (phoneField)': 'GB',
+      },
+    },
+    {
+      description: 'an international phone number without a country code',
+      importedStructuredRow: {
+        'Primary Phone Number (phoneField)': '+44 20 7946 0958',
+      },
+    },
+  ])(
+    'should parse $description without a calling code',
+    ({ importedStructuredRow }) => {
+      const result = buildRecordFromImportedStructuredRow({
+        importedStructuredRow,
+        fieldMetadataItems: fields,
+        spreadsheetImportFields: [],
+      });
+
+      expect(result.phoneField).toStrictEqual({
+        primaryPhoneNumber: '+442079460958',
+        primaryPhoneCallingCode: '+44',
+      });
+    },
+  );
+
+  it('should strip quotes from the default calling code for an unparseable phone number', () => {
+    const result = buildRecordFromImportedStructuredRow({
+      importedStructuredRow: {
+        'Primary Phone Number (phoneField)': 'not a phone number',
+      },
+      fieldMetadataItems: fields.map((field) =>
+        field.type === FieldMetadataType.PHONES
+          ? { ...field, defaultValue: { primaryPhoneCallingCode: "'+44'" } }
+          : field,
+      ),
+      spreadsheetImportFields: [],
+    });
+
+    expect(result.phoneField).toStrictEqual({
+      primaryPhoneNumber: 'not a phone number',
+      primaryPhoneCallingCode: '+44',
+    });
+  });
+
+  it.each([
+    { description: 'malformed JSON', value: 'not JSON' },
+    { description: 'a non-string value', value: true },
+    { description: 'a JSON array with invalid entries', value: '[null]' },
+  ])('should return fresh empty arrays for $description', ({ value }) => {
+    const args = {
+      importedStructuredRow: {
+        'Additional Emails (emailField)': value,
+        'Secondary Links (linksField)': value,
+        'Additional Phones (phoneField)': value,
+        arrayField: value,
+        multiSelectField: value,
+      },
+      fieldMetadataItems: fields,
+      spreadsheetImportFields: [],
+    };
+    const expected = {
+      emailField: { additionalEmails: [] },
+      linksField: { secondaryLinks: [] },
+      phoneField: { additionalPhones: [] },
+      arrayField: [],
+      multiSelectField: [],
+      createdBy: { source: 'IMPORT', context: {} },
+    };
+
+    const first = buildRecordFromImportedStructuredRow(args) as typeof expected;
+    const second = buildRecordFromImportedStructuredRow(
+      args,
+    ) as typeof expected;
+
+    expect(first).toStrictEqual(expected);
+    expect(second).toStrictEqual(expected);
+    expect(second.emailField.additionalEmails).not.toBe(
+      first.emailField.additionalEmails,
+    );
+    expect(second.linksField.secondaryLinks).not.toBe(
+      first.linksField.secondaryLinks,
+    );
+    expect(second.phoneField.additionalPhones).not.toBe(
+      first.phoneField.additionalPhones,
+    );
+    expect(second.arrayField).not.toBe(first.arrayField);
+    expect(second.multiSelectField).not.toBe(first.multiSelectField);
+  });
+
+  it('should omit malformed raw JSON and empty dates', () => {
+    const result = buildRecordFromImportedStructuredRow({
+      importedStructuredRow: { jsonField: 'not JSON', dateField: '' },
+      fieldMetadataItems: fields,
+      spreadsheetImportFields: [],
+    });
+
+    expect(result).not.toHaveProperty('jsonField');
+    expect(result).not.toHaveProperty('dateField');
+  });
+
+  it.each([
+    { variant: 'url', expectedUrl: 'https://www.example.com/path' },
+    { variant: 'domain', expectedUrl: 'example.com' },
+  ] as const)(
+    'should normalize a primary link with the $variant variant',
+    ({ variant, expectedUrl }) => {
+      const settings: FieldMetadataSettings<FieldMetadataType.LINKS> = {
+        type: variant,
+      };
+      const result = buildRecordFromImportedStructuredRow({
+        importedStructuredRow: {
+          'Link URL (linksField)': 'HTTPS://WWW.Example.COM/path/',
+        },
+        fieldMetadataItems: fields.map((field) =>
+          field.type === FieldMetadataType.LINKS
+            ? { ...field, settings }
+            : field,
+        ),
+        spreadsheetImportFields: [],
+      });
+
+      expect(result.linksField).toStrictEqual({ primaryLinkUrl: expectedUrl });
+    },
+  );
+
+  it.each([
+    { description: 'primitive values', booleanField: false, numberField: 0 },
+    { description: 'strings', booleanField: 'false', numberField: '0' },
+  ])(
+    'should retain false and zero imported as $description',
+    ({ booleanField, numberField }) => {
+      const result = buildRecordFromImportedStructuredRow({
+        importedStructuredRow: {
+          booleanField,
+          numberField: numberField as ImportedStructuredRow[string],
+        },
+        fieldMetadataItems: fields,
+        spreadsheetImportFields: [],
+      });
+
+      expect(result).toHaveProperty('booleanField', false);
+      expect(result).toHaveProperty('numberField', 0);
+    },
+  );
 
   it('should successfully build a record from imported structured row with relation composite subfield', () => {
     const importedStructuredRow: ImportedStructuredRow = {
