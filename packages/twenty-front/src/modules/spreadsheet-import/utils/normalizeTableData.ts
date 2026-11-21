@@ -26,10 +26,7 @@ export const normalizeTableData = (
             return acc;
           }
 
-          if (
-            'booleanMatches' in field.fieldType &&
-            Object.keys(field.fieldType).length > 0
-          ) {
+          if ('booleanMatches' in field.fieldType) {
             const booleanMatchKey = Object.keys(
               field.fieldType.booleanMatches || [],
             ).find((key) => key.toLowerCase() === curr?.toLowerCase());
@@ -40,9 +37,7 @@ export const normalizeTableData = (
 
             const booleanMatch =
               field.fieldType.booleanMatches?.[booleanMatchKey];
-            acc[column.value] = booleanMatchKey
-              ? booleanMatch
-              : normalizeCheckboxValue(curr);
+            acc[column.value] = booleanMatch;
           } else {
             acc[column.value] = normalizeCheckboxValue(curr);
           }
