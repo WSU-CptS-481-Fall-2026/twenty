@@ -40,6 +40,81 @@ const parseJsonOrEmptyArray = (value: unknown): unknown => {
   }
 };
 
+const STRING_ARRAY_JSON_SCHEMA = z
+  .preprocess(parseJsonOrEmptyArray, z.array(z.string()))
+  .catch(() => []);
+
+const LINK_ARRAY_JSON_SCHEMA = z
+  .preprocess(
+    parseJsonOrEmptyArray,
+    z.array(
+      z.object({
+        label: z.string().nullable(),
+        url: z.string().nullable(),
+      }),
+    ),
+  )
+  .catch(() => []);
+
+const PHONE_ARRAY_JSON_SCHEMA = z
+  .preprocess(
+    parseJsonOrEmptyArray,
+    z.array(
+      z.object({
+        number: z.string(),
+        callingCode: z.string(),
+        countryCode: z.string(),
+      }),
+    ),
+  )
+  .catch(() => []);
+
+const COMPOSITE_FIELD_TRANSFORM_CONFIGS = {
+  [FieldMetadataType.CURRENCY]: {
+    amountMicros: (value: any) =>
+      convertCurrencyAmountToCurrencyMicros(Number(value)),
+    currencyCode: undefined,
+  },
+  [FieldMetadataType.ADDRESS]: {
+    addressStreet1: castToString,
+    addressStreet2: castToString,
+    addressCity: castToString,
+    addressPostcode: castToString,
+    addressState: castToString,
+    addressCountry: castToString,
+  },
+  [FieldMetadataType.LINKS]: {
+    primaryLinkLabel: castToString,
+    primaryLinkUrl: normalizeUrlOrigin,
+    secondaryLinks: (value: unknown) => LINK_ARRAY_JSON_SCHEMA.parse(value),
+  },
+
+  [FieldMetadataType.PHONES]: {
+    primaryPhoneCountryCode: castToString,
+    primaryPhoneNumber: castToString,
+    primaryPhoneCallingCode: castToString,
+    additionalPhones: (value: unknown) => PHONE_ARRAY_JSON_SCHEMA.parse(value),
+  },
+
+  [FieldMetadataType.RICH_TEXT]: {
+    blocknote: castToString,
+    markdown: castToString,
+  },
+
+  [FieldMetadataType.EMAILS]: {
+    primaryEmail: (value: unknown) => castToString(value).toLowerCase(),
+    additionalEmails: (value: unknown) => STRING_ARRAY_JSON_SCHEMA.parse(value),
+  },
+  [FieldMetadataType.FULL_NAME]: {
+    firstName: undefined,
+    lastName: undefined,
+  },
+  [FieldMetadataType.ACTOR]: {
+    source: () => 'IMPORT',
+    context: () => ({}),
+  },
+};
+
 const buildCompositeFieldRecord = (
   field: FieldMetadataItem,
   importedStructuredRow: ImportedStructuredRow,
@@ -125,82 +200,7 @@ export const buildRecordFromImportedStructuredRow = ({
   importedStructuredRow,
   spreadsheetImportFields,
 }: BuildRecordFromImportedStructuredRowArgs) => {
-  const stringArrayJSONSchema = z
-    .preprocess(parseJsonOrEmptyArray, z.array(z.string()))
-    .catch([]);
-
-  const linkArrayJSONSchema = z
-    .preprocess(
-      parseJsonOrEmptyArray,
-      z.array(
-        z.object({
-          label: z.string().nullable(),
-          url: z.string().nullable(),
-        }),
-      ),
-    )
-    .catch([]);
-
-  const phoneArrayJSONSchema = z
-    .preprocess(
-      parseJsonOrEmptyArray,
-      z.array(
-        z.object({
-          number: z.string(),
-          callingCode: z.string(),
-          countryCode: z.string(),
-        }),
-      ),
-    )
-    .catch([]);
-
   const recordToBuild: Record<string, any> = {};
-
-  const COMPOSITE_FIELD_TRANSFORM_CONFIGS = {
-    [FieldMetadataType.CURRENCY]: {
-      amountMicros: (value: any) =>
-        convertCurrencyAmountToCurrencyMicros(Number(value)),
-      currencyCode: undefined,
-    },
-    [FieldMetadataType.ADDRESS]: {
-      addressStreet1: castToString,
-      addressStreet2: castToString,
-      addressCity: castToString,
-      addressPostcode: castToString,
-      addressState: castToString,
-      addressCountry: castToString,
-    },
-    [FieldMetadataType.LINKS]: {
-      primaryLinkLabel: castToString,
-      primaryLinkUrl: normalizeUrlOrigin,
-      secondaryLinks: linkArrayJSONSchema.parse,
-    },
-
-    [FieldMetadataType.PHONES]: {
-      primaryPhoneCountryCode: castToString,
-      primaryPhoneNumber: castToString,
-      primaryPhoneCallingCode: castToString,
-      additionalPhones: phoneArrayJSONSchema.parse,
-    },
-
-    [FieldMetadataType.RICH_TEXT]: {
-      blocknote: castToString,
-      markdown: castToString,
-    },
-
-    [FieldMetadataType.EMAILS]: {
-      primaryEmail: (value: unknown) => castToString(value).toLowerCase(),
-      additionalEmails: stringArrayJSONSchema.parse,
-    },
-    [FieldMetadataType.FULL_NAME]: {
-      firstName: undefined,
-      lastName: undefined,
-    },
-    [FieldMetadataType.ACTOR]: {
-      source: () => 'IMPORT',
-      context: () => ({}),
-    },
-  };
 
   for (const field of fieldMetadataItems) {
     const importedFieldValue = importedStructuredRow[field.name];
@@ -338,7 +338,7 @@ export const buildRecordFromImportedStructuredRow = ({
       case FieldMetadataType.MULTI_SELECT: {
         if (isDefined(importedFieldValue)) {
           recordToBuild[field.name] =
-            stringArrayJSONSchema.parse(importedFieldValue);
+            STRING_ARRAY_JSON_SCHEMA.parse(importedFieldValue);
         }
         break;
       }
