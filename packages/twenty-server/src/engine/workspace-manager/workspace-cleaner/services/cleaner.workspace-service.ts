@@ -566,24 +566,15 @@ export class CleanerWorkspaceService {
         continue;
       }
 
-      if (this.twentyConfigService.get('IS_BILLING_ENABLED')) {
-        const activeBillingSubscription =
-          await this.billingSubscriptionRepository.findOne(workspace.id, {
-            where: {
-              status: In([
-                SubscriptionStatus.Active,
-                SubscriptionStatus.Trialing,
-              ]),
-            },
-          });
+      if (
+        this.twentyConfigService.get('IS_BILLING_ENABLED') &&
+        (await this.hasActiveBillingSubscription(workspace.id))
+      ) {
+        this.logger.warn(
+          `${dryRunPrefix}Workspace ${workspace.id} has an active billing subscription, skipping`,
+        );
 
-        if (isDefined(activeBillingSubscription)) {
-          this.logger.warn(
-            `${dryRunPrefix}Workspace ${workspace.id} has an active billing subscription, skipping`,
-          );
-
-          continue;
-        }
+        continue;
       }
 
       this.logger.log(`${dryRunPrefix}Destroying workspace ${workspace.id}`);
@@ -594,5 +585,18 @@ export class CleanerWorkspaceService {
 
       this.logger.log(`${dryRunPrefix}Destroyed workspace ${workspace.id}`);
     }
+  }
+
+  private async hasActiveBillingSubscription(
+    workspaceId: string,
+  ): Promise<boolean> {
+    const activeBillingSubscription =
+      await this.billingSubscriptionRepository.findOne(workspaceId, {
+        where: {
+          status: In([SubscriptionStatus.Active, SubscriptionStatus.Trialing]),
+        },
+      });
+
+    return isDefined(activeBillingSubscription);
   }
 }
