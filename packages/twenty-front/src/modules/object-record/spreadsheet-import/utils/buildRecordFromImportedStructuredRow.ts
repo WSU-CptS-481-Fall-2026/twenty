@@ -137,6 +137,71 @@ const buildCompositeFieldRecord = (
   return isEmptyObject(compositeFieldRecord) ? undefined : compositeFieldRecord;
 };
 
+const buildPhonesFieldRecord = (
+  field: FieldMetadataItem,
+  importedStructuredRow: ImportedStructuredRow,
+): Record<string, unknown> | undefined => {
+  const compositeFieldRecord = buildCompositeFieldRecord(
+    field,
+    importedStructuredRow,
+    COMPOSITE_FIELD_TRANSFORM_CONFIGS[FieldMetadataType.PHONES],
+  );
+  if (!isDefined(compositeFieldRecord)) {
+    return undefined;
+  }
+
+  const primaryPhoneNumber =
+    importedStructuredRow[getCompositeSubFieldKey(field, 'primaryPhoneNumber')];
+  const primaryPhoneCallingCode =
+    importedStructuredRow[
+      getCompositeSubFieldKey(field, 'primaryPhoneCallingCode')
+    ];
+
+  const hasUserProvidedPrimaryPhoneNumberWithoutCallingCode =
+    isDefined(primaryPhoneNumber) &&
+    (!isDefined(primaryPhoneCallingCode) ||
+      !isNonEmptyString(primaryPhoneCallingCode));
+
+  // To meet backend requirements, handle case where user provides only a primaryPhoneNumber without calling code
+  if (!hasUserProvidedPrimaryPhoneNumberWithoutCallingCode) {
+    return compositeFieldRecord;
+  }
+
+  const primaryPhoneCountryCode =
+    importedStructuredRow[
+      getCompositeSubFieldKey(field, 'primaryPhoneCountryCode')
+    ];
+
+  const hasUserProvidedPrimaryPhoneCountryCode =
+    isDefined(primaryPhoneCountryCode) &&
+    isNonEmptyString(primaryPhoneCountryCode);
+
+  try {
+    const {
+      number: parsedNumber,
+      countryCallingCode: parsedCountryCallingCode,
+    } = parsePhoneNumberWithError(
+      primaryPhoneNumber as string,
+      hasUserProvidedPrimaryPhoneCountryCode
+        ? (primaryPhoneCountryCode as CountryCode)
+        : undefined,
+    );
+
+    return {
+      primaryPhoneNumber: parsedNumber,
+      primaryPhoneCallingCode: `+${parsedCountryCallingCode}`,
+    };
+  } catch {
+    return {
+      primaryPhoneNumber,
+      primaryPhoneCallingCode:
+        stripSimpleQuotesFromString(
+          field?.defaultValue?.primaryPhoneCallingCode,
+        ) || '+1',
+    };
+  }
+};
+
 const buildRelationConnectFieldRecord = (
   fieldMetadataItem: FieldMetadataItem,
   importedStructuredRow: ImportedStructuredRow,
@@ -240,66 +305,12 @@ export const buildRecordFromImportedStructuredRow = ({
         break;
       }
       case FieldMetadataType.PHONES: {
-        const compositeData = buildCompositeFieldRecord(
+        const phonesFieldRecord = buildPhonesFieldRecord(
           field,
           importedStructuredRow,
-          COMPOSITE_FIELD_TRANSFORM_CONFIGS[field.type],
         );
-        if (!isDefined(compositeData)) {
-          break;
-        }
-        recordToBuild[field.name] = compositeData;
-
-        const primaryPhoneNumber =
-          importedStructuredRow[
-            getCompositeSubFieldKey(field, 'primaryPhoneNumber')
-          ];
-
-        const primaryPhoneCallingCode =
-          importedStructuredRow[
-            getCompositeSubFieldKey(field, 'primaryPhoneCallingCode')
-          ];
-
-        const hasUserProvidedPrimaryPhoneNumberWithoutCallingCode =
-          isDefined(primaryPhoneNumber) &&
-          (!isDefined(primaryPhoneCallingCode) ||
-            !isNonEmptyString(primaryPhoneCallingCode));
-
-        // To meet backend requirements, handle case where user provides only a primaryPhoneNumber without calling code
-        if (hasUserProvidedPrimaryPhoneNumberWithoutCallingCode) {
-          const primaryPhoneCountryCode =
-            importedStructuredRow[
-              getCompositeSubFieldKey(field, 'primaryPhoneCountryCode')
-            ];
-
-          const hasUserProvidedPrimaryPhoneCountryCode =
-            isDefined(primaryPhoneCountryCode) &&
-            isNonEmptyString(primaryPhoneCountryCode);
-
-          try {
-            const {
-              number: parsedNumber,
-              countryCallingCode: parsedCountryCallingCode,
-            } = parsePhoneNumberWithError(
-              primaryPhoneNumber as string,
-              hasUserProvidedPrimaryPhoneCountryCode
-                ? (primaryPhoneCountryCode as CountryCode)
-                : undefined,
-            );
-
-            recordToBuild[field.name] = {
-              primaryPhoneNumber: parsedNumber,
-              primaryPhoneCallingCode: `+${parsedCountryCallingCode}`,
-            };
-          } catch {
-            recordToBuild[field.name] = {
-              primaryPhoneNumber,
-              primaryPhoneCallingCode:
-                stripSimpleQuotesFromString(
-                  field?.defaultValue?.primaryPhoneCallingCode,
-                ) || '+1',
-            };
-          }
+        if (isDefined(phonesFieldRecord)) {
+          recordToBuild[field.name] = phonesFieldRecord;
         }
         break;
       }
