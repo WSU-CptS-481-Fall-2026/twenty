@@ -28,6 +28,13 @@ type BuildRecordFromImportedStructuredRowArgs = {
   spreadsheetImportFields: SpreadsheetImportFields;
 };
 
+type ImportedFieldValue = NonNullable<ImportedStructuredRow[string]>;
+type CompositeFieldTransform = (value: ImportedFieldValue) => unknown;
+type CompositeFieldTransformConfig = Record<
+  string,
+  CompositeFieldTransform | undefined
+>;
+
 const parseJsonOrEmptyArray = (value: unknown): unknown => {
   if (typeof value !== 'string') {
     return [];
@@ -71,7 +78,7 @@ const PHONE_ARRAY_JSON_SCHEMA = z
 
 const COMPOSITE_FIELD_TRANSFORM_CONFIGS = {
   [FieldMetadataType.CURRENCY]: {
-    amountMicros: (value: any) =>
+    amountMicros: (value) =>
       convertCurrencyAmountToCurrencyMicros(Number(value)),
     currencyCode: undefined,
   },
@@ -85,7 +92,7 @@ const COMPOSITE_FIELD_TRANSFORM_CONFIGS = {
   },
   [FieldMetadataType.LINKS]: {
     primaryLinkLabel: castToString,
-    primaryLinkUrl: normalizeUrlOrigin,
+    primaryLinkUrl: (value) => normalizeUrlOrigin(value as string),
     secondaryLinks: (value: unknown) => LINK_ARRAY_JSON_SCHEMA.parse(value),
   },
 
@@ -113,13 +120,13 @@ const COMPOSITE_FIELD_TRANSFORM_CONFIGS = {
     source: () => 'IMPORT',
     context: () => ({}),
   },
-};
+} satisfies Partial<Record<FieldMetadataType, CompositeFieldTransformConfig>>;
 
 const buildCompositeFieldRecord = (
   field: FieldMetadataItem,
   importedStructuredRow: ImportedStructuredRow,
-  compositeFieldConfig: Record<string, ((value: any) => any) | undefined>,
-): Record<string, any> | undefined => {
+  compositeFieldConfig: CompositeFieldTransformConfig,
+): Record<string, unknown> | undefined => {
   const compositeFieldRecord = Object.entries(compositeFieldConfig).reduce(
     (acc, [compositeFieldKey, transform]) => {
       const value =
@@ -207,7 +214,7 @@ const buildRelationConnectFieldRecord = (
   importedStructuredRow: ImportedStructuredRow,
   spreadsheetImportFields: SpreadsheetImportFields,
   compositeFieldTransformConfigs: Partial<
-    Record<FieldMetadataType, Record<string, ((value: any) => any) | undefined>>
+    Record<FieldMetadataType, CompositeFieldTransformConfig>
   >,
 ) => {
   if (fieldMetadataItem.relation?.type !== RelationType.MANY_TO_ONE)
@@ -222,38 +229,37 @@ const buildRelationConnectFieldRecord = (
 
   if (relationConnectFields.length === 0) return undefined;
 
-  const relationConnectFieldValue = relationConnectFields.reduce(
-    (acc, field) => {
-      const uniqueFieldMetadataItem = field.uniqueFieldMetadataItem;
-      if (!isDefined(uniqueFieldMetadataItem)) return acc;
+  const relationConnectFieldValue = relationConnectFields.reduce<
+    Record<string, unknown>
+  >((acc, field) => {
+    const uniqueFieldMetadataItem = field.uniqueFieldMetadataItem;
+    if (!isDefined(uniqueFieldMetadataItem)) return acc;
 
-      if (
-        isCompositeFieldType(uniqueFieldMetadataItem.type) &&
-        isDefined(field.compositeSubFieldKey)
-      ) {
-        const rawValue = importedStructuredRow[field.key];
-        const transformConfig =
-          compositeFieldTransformConfigs[uniqueFieldMetadataItem.type];
-        const transform = transformConfig?.[field.compositeSubFieldKey];
-        const value = transform ? transform(rawValue) : rawValue;
+    if (
+      isCompositeFieldType(uniqueFieldMetadataItem.type) &&
+      isDefined(field.compositeSubFieldKey)
+    ) {
+      const rawValue = importedStructuredRow[field.key] as string;
+      const transformConfig =
+        compositeFieldTransformConfigs[uniqueFieldMetadataItem.type];
+      const transform = transformConfig?.[field.compositeSubFieldKey];
+      const value = transform ? transform(rawValue) : rawValue;
 
-        return {
-          ...acc,
-          [uniqueFieldMetadataItem.name]: {
-            ...(isDefined(acc?.[uniqueFieldMetadataItem.name])
-              ? acc[uniqueFieldMetadataItem.name]
-              : {}),
-            [field.compositeSubFieldKey]: value,
-          },
-        };
-      }
       return {
         ...acc,
-        [uniqueFieldMetadataItem.name]: importedStructuredRow[field.key],
+        [uniqueFieldMetadataItem.name]: {
+          ...(isDefined(acc?.[uniqueFieldMetadataItem.name])
+            ? (acc[uniqueFieldMetadataItem.name] as Record<string, unknown>)
+            : {}),
+          [field.compositeSubFieldKey]: value,
+        },
       };
-    },
-    {} as Record<string, any>,
-  );
+    }
+    return {
+      ...acc,
+      [uniqueFieldMetadataItem.name]: importedStructuredRow[field.key],
+    };
+  }, {});
 
   return isEmptyObject(relationConnectFieldValue)
     ? undefined
@@ -265,7 +271,7 @@ export const buildRecordFromImportedStructuredRow = ({
   importedStructuredRow,
   spreadsheetImportFields,
 }: BuildRecordFromImportedStructuredRowArgs) => {
-  const recordToBuild: Record<string, any> = {};
+  const recordToBuild: Record<string, unknown> = {};
 
   for (const field of fieldMetadataItems) {
     const importedFieldValue = importedStructuredRow[field.name];
@@ -290,13 +296,14 @@ export const buildRecordFromImportedStructuredRow = ({
         const linksVariant = (
           field.settings as FieldMetadataSettings<FieldMetadataType.LINKS>
         )?.type;
+        const normalizeLinkUrl = getLinkUrlNormalizer(linksVariant);
 
         const compositeData = buildCompositeFieldRecord(
           field,
           importedStructuredRow,
           {
             ...COMPOSITE_FIELD_TRANSFORM_CONFIGS[FieldMetadataType.LINKS],
-            primaryLinkUrl: getLinkUrlNormalizer(linksVariant),
+            primaryLinkUrl: (value) => normalizeLinkUrl(value as string),
           },
         );
         if (isDefined(compositeData)) {
