@@ -109,10 +109,10 @@ export class CleanerWorkspaceService {
     workspaceMember: WorkspaceMemberWorkspaceEntity,
     workspaceDisplayName: string | undefined,
     billingSettingsUrl: string,
-    daysSinceInactive: number,
+    daysSinceSuspended: number,
   ) {
     const emailData = {
-      daysSinceInactive,
+      daysSinceInactive: daysSinceSuspended,
       inactiveDaysBeforeDelete: this.inactiveDaysBeforeSoftDelete,
       userName: `${workspaceMember.name.firstName} ${workspaceMember.name.lastName}`,
       workspaceDisplayName: `${workspaceDisplayName}`,
@@ -134,7 +134,7 @@ export class CleanerWorkspaceService {
 
   private async warnWorkspaceMembers(
     workspace: WorkspaceEntity,
-    daysSinceInactive: number,
+    daysSinceSuspended: number,
     dryRun: boolean,
   ) {
     const dryRunPrefix = dryRun ? 'DRY RUN - ' : '';
@@ -145,8 +145,8 @@ export class CleanerWorkspaceService {
     this.logger.log(
       `${dryRunPrefix}Sending ${workspace.id} ${
         workspace.displayName
-      } suspended since ${daysSinceInactive} days emails to users ['${workspaceMembers
-        .map((workspaceUser) => workspaceUser.userId)
+      } suspended since ${daysSinceSuspended} days emails to users ['${workspaceMembers
+        .map((workspaceMember) => workspaceMember.userId)
         .join(', ')}']`,
     );
 
@@ -163,7 +163,7 @@ export class CleanerWorkspaceService {
           workspaceMember,
           workspace.displayName,
           billingSettingsUrl,
-          daysSinceInactive,
+          daysSinceSuspended,
         );
 
         await this.userVarsService.set({
@@ -179,10 +179,10 @@ export class CleanerWorkspaceService {
   private async sendCleaningEmail(
     workspaceMember: WorkspaceMemberWorkspaceEntity,
     workspaceDisplayName: string,
-    daysSinceInactive: number,
+    daysSinceSuspended: number,
   ) {
     const emailData = {
-      daysSinceInactive: daysSinceInactive,
+      daysSinceInactive: daysSinceSuspended,
       userName: `${workspaceMember.name.firstName} ${workspaceMember.name.lastName}`,
       workspaceDisplayName,
       locale: workspaceMember.locale,
@@ -225,7 +225,7 @@ export class CleanerWorkspaceService {
 
   private async informWorkspaceMembersAndSoftDeleteWorkspace(
     workspace: WorkspaceEntity,
-    daysSinceInactive: number,
+    daysSinceSuspended: number,
     dryRun: boolean,
   ) {
     const dryRunPrefix = dryRun ? 'DRY RUN - ' : '';
@@ -247,7 +247,7 @@ export class CleanerWorkspaceService {
       `${dryRunPrefix}Sending workspace ${workspace.id} ${
         workspace.displayName
       } deletion emails to users ['${workspaceMembers
-        .map((workspaceUser) => workspaceUser.userId)
+        .map((workspaceMember) => workspaceMember.userId)
         .join(', ')}']`,
     );
 
@@ -262,7 +262,7 @@ export class CleanerWorkspaceService {
         await this.sendCleaningEmail(
           workspaceMember,
           workspace.displayName || '',
-          daysSinceInactive,
+          daysSinceSuspended,
         );
       }
 
@@ -372,16 +372,17 @@ export class CleanerWorkspaceService {
     ignoreGracePeriod?: boolean;
     dryRun?: boolean;
     workspace: WorkspaceEntity;
-  }): Promise<WorkspaceEntity | undefined> {
+  }): Promise<boolean> {
     const dryRunPrefix = dryRun ? 'DRY RUN - ' : '';
 
     if (!isDefined(workspace.deletedAt)) {
-      return;
+      return false;
     }
 
-    const daysSinceSoftDeleted = workspace.deletedAt
-      ? differenceInDays(new Date(), workspace.deletedAt)
-      : 0;
+    const daysSinceSoftDeleted = differenceInDays(
+      new Date(),
+      workspace.deletedAt,
+    );
 
     const hasPassedGracePeriod =
       daysSinceSoftDeleted >
@@ -390,14 +391,14 @@ export class CleanerWorkspaceService {
     const canHardDelete = ignoreGracePeriod || hasPassedGracePeriod;
 
     if (!canHardDelete) {
-      return;
+      return false;
     }
 
     this.logger.log(
       `${dryRunPrefix}Destroying workspace ${workspace.id} ${workspace.displayName}`,
     );
     if (dryRun) {
-      return;
+      return false;
     }
 
     await this.workspaceService.deleteWorkspace(workspace.id);
@@ -406,7 +407,7 @@ export class CleanerWorkspaceService {
       shouldStoreInCache: false,
     });
 
-    return workspace;
+    return true;
   }
 
   async batchWarnOrCleanSuspendedWorkspaces({
@@ -450,16 +451,16 @@ export class CleanerWorkspaceService {
           isSoftDeletedWorkspace &&
           isWithinDeletionLimit
         ) {
-          const result = await this.destroySoftDeletedWorkspace({
+          const isDestroyed = await this.destroySoftDeletedWorkspace({
             workspace,
             dryRun,
             ignoreGracePeriod: ignoreDestroyGracePeriod,
           });
 
-          if (isDefined(result)) {
+          if (isDestroyed) {
             deletedWorkspacesCount++;
             this.logger.log(
-              `Destroyed ${deletedWorkspacesCount} workspaces on ${this.maxNumberOfWorkspacesDeletedPerExecution} limit durings this execution`,
+              `Destroyed ${deletedWorkspacesCount} workspaces on ${this.maxNumberOfWorkspacesDeletedPerExecution} limit during this execution`,
             );
           }
           continue;
@@ -506,20 +507,19 @@ export class CleanerWorkspaceService {
     onlyOperation: CleanSuspendedWorkspacesOperation | undefined;
     alreadyWarnedWorkspaceIds: Set<string | null>;
   }): Promise<void> {
-    const inactiveDaysSinceSuspended =
-      this.computeDaysSinceSuspended(workspace);
+    const daysSinceSuspended = this.computeDaysSinceSuspended(workspace);
 
-    if (inactiveDaysSinceSuspended === null) {
+    if (daysSinceSuspended === null) {
       return;
     }
 
     if (
       isOperationSelected(onlyOperation, 'soft-delete') &&
-      inactiveDaysSinceSuspended > this.inactiveDaysBeforeSoftDelete
+      daysSinceSuspended > this.inactiveDaysBeforeSoftDelete
     ) {
       await this.informWorkspaceMembersAndSoftDeleteWorkspace(
         workspace,
-        inactiveDaysSinceSuspended,
+        daysSinceSuspended,
         dryRun,
       );
 
@@ -529,14 +529,10 @@ export class CleanerWorkspaceService {
     if (
       isOperationSelected(onlyOperation, 'warn') &&
       !alreadyWarnedWorkspaceIds.has(workspace.id) &&
-      inactiveDaysSinceSuspended > this.inactiveDaysBeforeWarn &&
-      inactiveDaysSinceSuspended <= this.inactiveDaysBeforeSoftDelete
+      daysSinceSuspended > this.inactiveDaysBeforeWarn &&
+      daysSinceSuspended <= this.inactiveDaysBeforeSoftDelete
     ) {
-      await this.warnWorkspaceMembers(
-        workspace,
-        inactiveDaysSinceSuspended,
-        dryRun,
-      );
+      await this.warnWorkspaceMembers(workspace, daysSinceSuspended, dryRun);
     }
   }
 
