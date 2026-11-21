@@ -1,6 +1,7 @@
 import { type MatchColumnsStepProps } from '@/spreadsheet-import/steps/components/MatchColumnsStep/MatchColumnsStep';
 
 import {
+  type ImportedRow,
   type SpreadsheetImportField,
   type SpreadsheetImportMultiSelect,
   type SpreadsheetImportSelect,
@@ -46,6 +47,22 @@ const buildMatchedSelectColumn = (
   };
 };
 
+const collectMultiSelectEntries = (
+  data: ImportedRow[] | undefined,
+  columnIndex: number,
+): string[] => [
+  ...new Set(
+    data
+      ?.flatMap<unknown>((row) => {
+        const value = row[columnIndex];
+        return isDefined(value)
+          ? spreadsheetImportParseMultiSelectOptionsOrThrow(value)
+          : [];
+      })
+      .filter((entry) => typeof entry === 'string'),
+  ),
+];
+
 export const setColumn = (
   oldColumn: SpreadsheetColumn,
   field?: SpreadsheetImportField,
@@ -60,19 +77,9 @@ export const setColumn = (
   }
 
   if (field?.fieldType.type === 'multiSelect') {
-    let entries: string[] = [];
+    let entries: string[];
     try {
-      entries = [
-        ...new Set(
-          data
-            ?.flatMap((row) => {
-              const value = row[oldColumn.index];
-              if (!isDefined(value)) return [];
-              return spreadsheetImportParseMultiSelectOptionsOrThrow(value);
-            })
-            .filter((entry) => typeof entry === 'string'),
-        ),
-      ];
+      entries = collectMultiSelectEntries(data, oldColumn.index);
     } catch {
       return {
         index: oldColumn.index,
