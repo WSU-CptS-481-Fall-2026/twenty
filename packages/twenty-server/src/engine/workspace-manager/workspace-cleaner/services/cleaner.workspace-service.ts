@@ -51,6 +51,11 @@ export type CleanSuspendedWorkspacesOptions = {
   onlyOperation?: CleanSuspendedWorkspacesOperation;
 };
 
+const isOperationSelected = (
+  onlyOperation: CleanSuspendedWorkspacesOperation | undefined,
+  operation: CleanSuspendedWorkspacesOperation,
+) => !isDefined(onlyOperation) || onlyOperation === operation;
+
 @Injectable()
 export class CleanerWorkspaceService {
   private readonly logger = new Logger(CleanerWorkspaceService.name);
@@ -406,17 +411,8 @@ export class CleanerWorkspaceService {
       withDeleted: true,
     });
 
-    const warnedUserVars = await this.keyValuePairRepository.find({
-      select: ['workspaceId'],
-      where: {
-        workspaceId: In(workspaces.map((workspace) => workspace.id)),
-        type: KeyValuePairType.USER_VARIABLE,
-        key: USER_WORKSPACE_DELETION_WARNING_SENT_KEY,
-      },
-    });
-    const alreadyWarnedWorkspaceIds = new Set(
-      warnedUserVars.map((userVar) => userVar.workspaceId),
-    );
+    const alreadyWarnedWorkspaceIds =
+      await this.findAlreadyWarnedWorkspaceIds(workspaces);
 
     let deletedWorkspacesCount = 0;
 
@@ -432,7 +428,7 @@ export class CleanerWorkspaceService {
           this.maxNumberOfWorkspacesDeletedPerExecution;
 
         if (
-          (!isDefined(onlyOperation) || onlyOperation === 'destroy') &&
+          isOperationSelected(onlyOperation, 'destroy') &&
           isSoftDeletedWorkspace &&
           isWithinDeletionLimit
         ) {
@@ -451,38 +447,12 @@ export class CleanerWorkspaceService {
           continue;
         }
 
-        const inactiveDaysSinceSuspended =
-          this.computeDaysSinceSuspended(workspace);
-
-        if (inactiveDaysSinceSuspended === null) {
-          continue;
-        }
-
-        if (
-          (!isDefined(onlyOperation) || onlyOperation === 'soft-delete') &&
-          inactiveDaysSinceSuspended > this.inactiveDaysBeforeSoftDelete
-        ) {
-          await this.informWorkspaceMembersAndSoftDeleteWorkspace(
-            workspace,
-            inactiveDaysSinceSuspended,
-            dryRun,
-          );
-
-          continue;
-        }
-
-        if (
-          (!isDefined(onlyOperation) || onlyOperation === 'warn') &&
-          !alreadyWarnedWorkspaceIds.has(workspace.id) &&
-          inactiveDaysSinceSuspended > this.inactiveDaysBeforeWarn &&
-          inactiveDaysSinceSuspended <= this.inactiveDaysBeforeSoftDelete
-        ) {
-          await this.warnWorkspaceMembers(
-            workspace,
-            inactiveDaysSinceSuspended,
-            dryRun,
-          );
-        }
+        await this.warnOrSoftDeleteSuspendedWorkspace({
+          workspace,
+          dryRun,
+          onlyOperation,
+          alreadyWarnedWorkspaceIds,
+        });
       } catch (error) {
         this.logger.error(
           `Error while processing workspace ${workspace.id} ${workspace.displayName}: ${error}`,
@@ -490,6 +460,66 @@ export class CleanerWorkspaceService {
       }
     }
     this.logger.log(`${dryRunPrefix}batchWarnOrCleanSuspendedWorkspaces done!`);
+  }
+
+  private async findAlreadyWarnedWorkspaceIds(
+    workspaces: WorkspaceEntity[],
+  ): Promise<Set<string | null>> {
+    const warnedUserVars = await this.keyValuePairRepository.find({
+      select: ['workspaceId'],
+      where: {
+        workspaceId: In(workspaces.map((workspace) => workspace.id)),
+        type: KeyValuePairType.USER_VARIABLE,
+        key: USER_WORKSPACE_DELETION_WARNING_SENT_KEY,
+      },
+    });
+
+    return new Set(warnedUserVars.map((userVar) => userVar.workspaceId));
+  }
+
+  private async warnOrSoftDeleteSuspendedWorkspace({
+    workspace,
+    dryRun,
+    onlyOperation,
+    alreadyWarnedWorkspaceIds,
+  }: {
+    workspace: WorkspaceEntity;
+    dryRun: boolean;
+    onlyOperation: CleanSuspendedWorkspacesOperation | undefined;
+    alreadyWarnedWorkspaceIds: Set<string | null>;
+  }): Promise<void> {
+    const inactiveDaysSinceSuspended =
+      this.computeDaysSinceSuspended(workspace);
+
+    if (inactiveDaysSinceSuspended === null) {
+      return;
+    }
+
+    if (
+      isOperationSelected(onlyOperation, 'soft-delete') &&
+      inactiveDaysSinceSuspended > this.inactiveDaysBeforeSoftDelete
+    ) {
+      await this.informWorkspaceMembersAndSoftDeleteWorkspace(
+        workspace,
+        inactiveDaysSinceSuspended,
+        dryRun,
+      );
+
+      return;
+    }
+
+    if (
+      isOperationSelected(onlyOperation, 'warn') &&
+      !alreadyWarnedWorkspaceIds.has(workspace.id) &&
+      inactiveDaysSinceSuspended > this.inactiveDaysBeforeWarn &&
+      inactiveDaysSinceSuspended <= this.inactiveDaysBeforeSoftDelete
+    ) {
+      await this.warnWorkspaceMembers(
+        workspace,
+        inactiveDaysSinceSuspended,
+        dryRun,
+      );
+    }
   }
 
   async destroyBillingDeactivatedAndSoftDeletedWorkspaces(
