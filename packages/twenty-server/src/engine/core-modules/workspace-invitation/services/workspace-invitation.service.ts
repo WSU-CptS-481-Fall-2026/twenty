@@ -317,23 +317,14 @@ export class WorkspaceInvitationService {
     }
 
     const invitationResults = await Promise.allSettled(
-      emails.map(async (email) => {
-        const appToken = await this.createWorkspaceInvitation(
+      emails.map((email) =>
+        this.createInvitationForEmail({
           email,
           workspace,
           roleId,
-          isOnboardingInviteReward,
-        );
-
-        if (!appToken.context?.email) {
-          throw new WorkspaceInvitationException(
-            'Invalid email',
-            WorkspaceInvitationExceptionCode.EMAIL_MISSING,
-          );
-        }
-
-        return { appToken, email: appToken.context.email };
-      }),
+          isOnboardingInvitation: isOnboardingInviteReward,
+        }),
+      ),
     );
 
     for (const invitation of invitationResults) {
@@ -356,7 +347,45 @@ export class WorkspaceInvitationService {
       ),
     });
 
-    const i18n = this.i18nService.getI18nInstance(sender.locale);
+    return this.buildSendInvitationsResponse(invitationResults, sender.locale);
+  }
+
+  private async createInvitationForEmail({
+    email,
+    workspace,
+    roleId,
+    isOnboardingInvitation,
+  }: {
+    email: string;
+    workspace: WorkspaceEntity;
+    roleId?: string;
+    isOnboardingInvitation: boolean;
+  }) {
+    const appToken = await this.createWorkspaceInvitation(
+      email,
+      workspace,
+      roleId,
+      isOnboardingInvitation,
+    );
+
+    if (!appToken.context?.email) {
+      throw new WorkspaceInvitationException(
+        'Invalid email',
+        WorkspaceInvitationExceptionCode.EMAIL_MISSING,
+      );
+    }
+
+    return { appToken, email: appToken.context.email };
+  }
+
+  private buildSendInvitationsResponse(
+    invitationResults: PromiseSettledResult<{
+      appToken: AppTokenEntity;
+      email: string;
+    }>[],
+    locale: WorkspaceMemberWorkspaceEntity['locale'],
+  ): SendInvitationsDTO {
+    const i18n = this.i18nService.getI18nInstance(locale);
 
     const result = invitationResults.reduce<{
       errors: string[];
