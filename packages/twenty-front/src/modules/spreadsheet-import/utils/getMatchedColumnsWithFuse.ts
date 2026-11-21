@@ -7,7 +7,7 @@ import {
 import { type SpreadsheetColumn } from '@/spreadsheet-import/types/SpreadsheetColumn';
 import { type SpreadsheetColumns } from '@/spreadsheet-import/types/SpreadsheetColumns';
 import { SpreadsheetColumnType } from '@/spreadsheet-import/types/SpreadsheetColumnType';
-import { setColumn } from '@/spreadsheet-import/utils/setColumn';
+import { buildMatchedColumn } from '@/spreadsheet-import/utils/buildMatchedColumn';
 import Fuse from 'fuse.js';
 import { isDefined } from 'twenty-shared/utils';
 
@@ -62,7 +62,11 @@ export const getMatchedColumnsWithFuse = ({
     );
 
     if (isFirstMatchValid && isFieldStillUnmatched) {
-      const newColumn = setColumn(column, firstMatch.item as any, data);
+      const newColumn = buildMatchedColumn(
+        column,
+        firstMatch.item as any,
+        data,
+      );
 
       matchedColumns.push(newColumn);
     } else {

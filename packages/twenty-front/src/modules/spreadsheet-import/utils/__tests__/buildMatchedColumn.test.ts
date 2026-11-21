@@ -4,10 +4,10 @@ import {
 } from '@/spreadsheet-import/types';
 import { type SpreadsheetColumn } from '@/spreadsheet-import/types/SpreadsheetColumn';
 import { SpreadsheetColumnType } from '@/spreadsheet-import/types/SpreadsheetColumnType';
-import { setColumn } from '@/spreadsheet-import/utils/setColumn';
+import { buildMatchedColumn } from '@/spreadsheet-import/utils/buildMatchedColumn';
 import { FieldMetadataType } from 'twenty-shared/types';
 
-describe('setColumn', () => {
+describe('buildMatchedColumn', () => {
   const defaultField = {
     Icon: null,
     label: 'label',
@@ -33,7 +33,7 @@ describe('setColumn', () => {
     } as SpreadsheetImportField;
 
     const data = [['John'], ['Alice']];
-    const result = setColumn(oldColumn, field, data);
+    const result = buildMatchedColumn(oldColumn, field, data);
 
     expect(result).toEqual({
       index: 0,
@@ -59,7 +59,7 @@ describe('setColumn', () => {
       fieldType: { type: 'checkbox' },
     } as SpreadsheetImportField;
 
-    const result = setColumn(oldColumn, field);
+    const result = buildMatchedColumn(oldColumn, field);
 
     expect(result).toEqual({
       index: 0,
@@ -75,7 +75,7 @@ describe('setColumn', () => {
       fieldType: { type: 'input' },
     } as SpreadsheetImportField;
 
-    const result = setColumn(oldColumn, field);
+    const result = buildMatchedColumn(oldColumn, field);
 
     expect(result).toEqual({
       index: 0,
@@ -91,7 +91,7 @@ describe('setColumn', () => {
       fieldType: { type: 'unknown' },
     } as unknown as SpreadsheetImportField;
 
-    const result = setColumn(oldColumn, field);
+    const result = buildMatchedColumn(oldColumn, field);
 
     expect(result).toEqual({
       index: 0,
@@ -128,33 +128,37 @@ describe('setColumn', () => {
       ['["a", "Beta", "b"]'],
     ];
 
-    expect(setColumn(oldColumn, multiSelectField, data)).toStrictEqual({
-      index: 0,
-      header: 'Name',
-      type: SpreadsheetColumnType.matchedSelectOptions,
-      value: 'Name',
-      matchedOptions: [
-        { entry: 'Beta', value: 'b' },
-        { entry: 'a', value: 'a' },
-        { entry: 'b', value: 'b' },
-      ],
-    });
+    expect(buildMatchedColumn(oldColumn, multiSelectField, data)).toStrictEqual(
+      {
+        index: 0,
+        header: 'Name',
+        type: SpreadsheetColumnType.matchedSelectOptions,
+        value: 'Name',
+        matchedOptions: [
+          { entry: 'Beta', value: 'b' },
+          { entry: 'a', value: 'a' },
+          { entry: 'b', value: 'b' },
+        ],
+      },
+    );
   });
 
   it('should leave unmatched and empty-valued comma-separated entries without a value', () => {
     const data = [['a, Missing, Blank']];
 
-    expect(setColumn(oldColumn, multiSelectField, data)).toStrictEqual({
-      index: 0,
-      header: 'Name',
-      type: SpreadsheetColumnType.matchedSelect,
-      value: 'Name',
-      matchedOptions: [
-        { entry: 'a', value: 'a' },
-        { entry: 'Missing' },
-        { entry: 'Blank' },
-      ],
-    });
+    expect(buildMatchedColumn(oldColumn, multiSelectField, data)).toStrictEqual(
+      {
+        index: 0,
+        header: 'Name',
+        type: SpreadsheetColumnType.matchedSelect,
+        value: 'Name',
+        matchedOptions: [
+          { entry: 'a', value: 'a' },
+          { entry: 'Missing' },
+          { entry: 'Blank' },
+        ],
+      },
+    );
   });
 
   it('should return the multiselect error column when a cell cannot be parsed', () => {
@@ -162,7 +166,7 @@ describe('setColumn', () => {
     Reflect.set(malformedRow, 0, 42);
 
     expect(
-      setColumn(oldColumn, multiSelectField, [malformedRow]),
+      buildMatchedColumn(oldColumn, multiSelectField, [malformedRow]),
     ).toStrictEqual({
       index: 0,
       header: 'Name',
@@ -181,7 +185,7 @@ describe('setColumn', () => {
         fieldType: { type, options: [{ label: 'Alpha', value: 'a' }] },
       };
 
-      expect(setColumn(oldColumn, field)).toStrictEqual({
+      expect(buildMatchedColumn(oldColumn, field)).toStrictEqual({
         index: 0,
         header: 'Name',
         type: SpreadsheetColumnType.matchedSelectOptions,
@@ -192,7 +196,7 @@ describe('setColumn', () => {
   );
 
   it('should return an empty column when no field is provided', () => {
-    expect(setColumn(oldColumn)).toStrictEqual({
+    expect(buildMatchedColumn(oldColumn)).toStrictEqual({
       index: 0,
       header: 'Name',
       type: SpreadsheetColumnType.empty,
@@ -202,7 +206,7 @@ describe('setColumn', () => {
   it('should include values only for matched select entries', () => {
     const data = [['a'], ['Missing']];
 
-    expect(setColumn(oldColumn, selectField, data)).toStrictEqual({
+    expect(buildMatchedColumn(oldColumn, selectField, data)).toStrictEqual({
       index: 0,
       header: 'Name',
       type: SpreadsheetColumnType.matchedSelect,
@@ -214,7 +218,7 @@ describe('setColumn', () => {
   it('should match a select entry by option label and return its value', () => {
     const data = [['Alpha']];
 
-    expect(setColumn(oldColumn, selectField, data)).toStrictEqual({
+    expect(buildMatchedColumn(oldColumn, selectField, data)).toStrictEqual({
       index: 0,
       header: 'Name',
       type: SpreadsheetColumnType.matchedSelectOptions,

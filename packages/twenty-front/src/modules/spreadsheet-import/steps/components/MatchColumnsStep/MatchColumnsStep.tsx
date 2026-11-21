@@ -7,9 +7,9 @@ import {
   type ImportedRow,
   type ImportedStructuredRow,
 } from '@/spreadsheet-import/types';
+import { buildMatchedColumn } from '@/spreadsheet-import/utils/buildMatchedColumn';
 import { findUnmatchedRequiredFields } from '@/spreadsheet-import/utils/findUnmatchedRequiredFields';
 import { normalizeTableData } from '@/spreadsheet-import/utils/normalizeTableData';
-import { setColumn } from '@/spreadsheet-import/utils/setColumn';
 import { setIgnoreColumn } from '@/spreadsheet-import/utils/setIgnoreColumn';
 import { setSubColumn } from '@/spreadsheet-import/utils/setSubColumn';
 import { useDialogManager } from '@/ui/feedback/dialog-manager/hooks/useDialogManager';
@@ -101,7 +101,7 @@ export const MatchColumnsStep = ({
     (columnIndex: number) => {
       setColumns(
         columns.map((column, index) =>
-          columnIndex === index ? setColumn(column) : column,
+          columnIndex === index ? buildMatchedColumn(column) : column,
         ),
       );
     },
@@ -126,9 +126,9 @@ export const MatchColumnsStep = ({
         setColumns(
           columns.map<SpreadsheetColumn>((column, index) => {
             if (columnIndex === index) {
-              return setColumn(column, field, data);
+              return buildMatchedColumn(column, field, data);
             } else if (index === existingFieldIndex) {
-              return setColumn(column);
+              return buildMatchedColumn(column);
             } else {
               return column;
             }

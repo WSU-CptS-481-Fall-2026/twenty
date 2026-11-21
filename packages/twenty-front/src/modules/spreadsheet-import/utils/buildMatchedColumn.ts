@@ -63,7 +63,7 @@ const collectMultiSelectEntries = (
   ),
 ];
 
-export const setColumn = (
+export const buildMatchedColumn = (
   oldColumn: SpreadsheetColumn,
   field?: SpreadsheetImportField,
   data?: MatchColumnsStepProps['data'],
