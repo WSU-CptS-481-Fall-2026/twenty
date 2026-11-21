@@ -247,18 +247,9 @@ export class AuthService {
     }
 
     if (userData.type === 'existingUser') {
-      if (!userData.existingUser.passwordHash) {
-        throw new AuthException(
-          'Incorrect login method',
-          AuthExceptionCode.INVALID_INPUT,
-          {
-            userFriendlyMessage: msg`User was not created with email/password`,
-          },
-        );
-      }
       await this.signInUpService.validatePassword({
         password: authParams.password,
-        passwordHash: userData.existingUser.passwordHash,
+        passwordHash: this.getPasswordHashOrThrow(userData.existingUser),
       });
     }
   }
@@ -783,24 +774,25 @@ export class AuthService {
     const existingUser =
       await this.userService.findUserByEmailWithWorkspaces(email);
 
+      //can use multiple times now! yay!
+      const newUserPayload: SignInUpNewUserPayload = {
+        firstName,
+        lastName,
+        email,
+        picture,
+        locale,
+        isEmailAlreadyVerified: true,
+      };
+
+
     // Route SSO sign-ins through the same create-or-select flow as credentials
     // instead of landing straight on a workspace subdomain.
     if (!workspaceId && !workspaceInviteHash) {
       const user =
         existingUser ??
-        (await this.signInUpService.signUpWithoutWorkspace(
-          {
-            firstName,
-            lastName,
-            email,
-            picture,
-            locale,
-            isEmailAlreadyVerified: true,
-          },
-          {
-            provider: authProvider,
-          },
-        ));
+        await this.signInUpService.signUpWithoutWorkspace(newUserPayload, {
+  provider: authProvider,
+});
 
       const ssoExchangeToken =
         await this.ssoExchangeTokenService.generateSsoExchangeToken({
@@ -838,17 +830,7 @@ export class AuthService {
             })
           : undefined;
 
-      const { userData } = this.formatUserDataPayload(
-        {
-          firstName,
-          lastName,
-          email,
-          picture,
-          locale,
-          isEmailAlreadyVerified: true,
-        },
-        existingUser,
-      );
+      const { userData } = this.formatUserDataPayload(newUserPayload, existingUser);
 
       await this.checkAccessForSignIn({
         userData,
