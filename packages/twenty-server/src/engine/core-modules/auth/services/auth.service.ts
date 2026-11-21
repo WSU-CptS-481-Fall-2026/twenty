@@ -151,6 +151,20 @@ export class AuthService {
     );
   }
 
+  private getPasswordHashOrThrow(user: UserEntity) {
+    if (!user.passwordHash) {
+      throw new AuthException(
+        'Incorrect login method',
+        AuthExceptionCode.INVALID_INPUT,
+        {
+          userFriendlyMessage: msg`User was not created with email/password`,
+        },
+      );
+    }
+
+    return user.passwordHash;
+  }
+
   async validateLoginWithPassword(
     input: UserCredentialsInput,
     targetWorkspace?: WorkspaceEntity,
@@ -188,17 +202,9 @@ export class AuthService {
       await this.checkAccessAndUseInvitationOrThrow(targetWorkspace, user);
     }
 
-    if (!user.passwordHash) {
-      throw new AuthException(
-        'Incorrect login method',
-        AuthExceptionCode.INVALID_INPUT,
-        {
-          userFriendlyMessage: msg`User was not created with email/password`,
-        },
-      );
-    }
+    const passwordHash = this.getPasswordHashOrThrow(user);
 
-    const isValid = await compareHash(input.password, user.passwordHash);
+    const isValid = await compareHash(input.password, passwordHash);
 
     if (!isValid) {
       throw new AuthException(
