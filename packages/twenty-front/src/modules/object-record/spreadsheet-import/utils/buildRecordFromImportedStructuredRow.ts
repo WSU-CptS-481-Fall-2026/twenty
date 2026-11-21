@@ -28,6 +28,18 @@ type BuildRecordFromImportedStructuredRowArgs = {
   spreadsheetImportFields: SpreadsheetImportFields;
 };
 
+const parseJsonOrEmptyArray = (value: unknown): unknown => {
+  if (typeof value !== 'string') {
+    return [];
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return [];
+  }
+};
+
 const buildCompositeFieldRecord = (
   field: FieldMetadataItem,
   importedStructuredRow: ImportedStructuredRow,
@@ -114,30 +126,12 @@ export const buildRecordFromImportedStructuredRow = ({
   spreadsheetImportFields,
 }: BuildRecordFromImportedStructuredRowArgs) => {
   const stringArrayJSONSchema = z
-    .preprocess((value) => {
-      try {
-        if (typeof value !== 'string') {
-          return [];
-        }
-        return JSON.parse(value);
-      } catch {
-        return [];
-      }
-    }, z.array(z.string()))
+    .preprocess(parseJsonOrEmptyArray, z.array(z.string()))
     .catch([]);
 
   const linkArrayJSONSchema = z
     .preprocess(
-      (value) => {
-        try {
-          if (typeof value !== 'string') {
-            return [];
-          }
-          return JSON.parse(value);
-        } catch {
-          return [];
-        }
-      },
+      parseJsonOrEmptyArray,
       z.array(
         z.object({
           label: z.string().nullable(),
@@ -149,16 +143,7 @@ export const buildRecordFromImportedStructuredRow = ({
 
   const phoneArrayJSONSchema = z
     .preprocess(
-      (value) => {
-        try {
-          if (typeof value !== 'string') {
-            return [];
-          }
-          return JSON.parse(value);
-        } catch {
-          return [];
-        }
-      },
+      parseJsonOrEmptyArray,
       z.array(
         z.object({
           number: z.string(),
