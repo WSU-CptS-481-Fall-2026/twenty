@@ -1019,11 +1019,10 @@ export class AuthService {
       // proxies or Referer headers: browsers keep it out of the request line.
       const url = this.domainServerConfigService.buildBaseUrl({
         pathname: AppPath.SignInUp,
-        searchParams: {
-          ...(isNonEmptyString(returnToPath) && returnToPath.startsWith('/')
+        searchParams:
+          isNonEmptyString(returnToPath) && returnToPath.startsWith('/')
             ? { returnToPath }
-            : {}),
-        },
+            : {},
         hash: `ssoExchangeToken=${ssoExchangeToken.token}`,
       });
 
