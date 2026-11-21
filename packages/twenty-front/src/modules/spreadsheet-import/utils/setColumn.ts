@@ -1,13 +1,50 @@
 import { type MatchColumnsStepProps } from '@/spreadsheet-import/steps/components/MatchColumnsStep/MatchColumnsStep';
 
-import { type SpreadsheetImportField } from '@/spreadsheet-import/types';
+import {
+  type SpreadsheetImportField,
+  type SpreadsheetImportMultiSelect,
+  type SpreadsheetImportSelect,
+} from '@/spreadsheet-import/types';
 import { type SpreadsheetColumn } from '@/spreadsheet-import/types/SpreadsheetColumn';
 import { SpreadsheetColumnType } from '@/spreadsheet-import/types/SpreadsheetColumnType';
-import { type SpreadsheetMatchedOptions } from '@/spreadsheet-import/types/SpreadsheetMatchedOptions';
 import { spreadsheetImportParseMultiSelectOptionsOrThrow } from '@/spreadsheet-import/utils/spreadsheetImportParseMultiSelectOptionsOrThrow';
 import { t } from '@lingui/core/macro';
 import { isDefined } from 'twenty-shared/utils';
+import { type SelectOption } from 'twenty-ui/input';
 import { uniqueEntries } from './uniqueEntries';
+
+const findMatchingOptionValue = (
+  entry: string,
+  fieldOptions: SelectOption[],
+): string | undefined =>
+  fieldOptions.find(
+    (option) => option.value === entry || option.label === entry,
+  )?.value;
+
+const buildMatchedSelectColumn = (
+  oldColumn: SpreadsheetColumn,
+  field: SpreadsheetImportField,
+  entries: string[],
+): SpreadsheetColumn => {
+  const fieldOptions = (
+    field.fieldType as SpreadsheetImportSelect | SpreadsheetImportMultiSelect
+  ).options;
+  const matchedOptions = entries.map((entry) => {
+    const value = findMatchingOptionValue(entry, fieldOptions);
+    return value ? { entry, value } : { entry };
+  });
+  const allMatched =
+    matchedOptions.filter((option) => option.value).length === entries.length;
+
+  return {
+    ...oldColumn,
+    type: allMatched
+      ? SpreadsheetColumnType.matchedSelectOptions
+      : SpreadsheetColumnType.matchedSelect,
+    value: field.key,
+    matchedOptions,
+  };
+};
 
 export const setColumn = (
   oldColumn: SpreadsheetColumn,
@@ -15,38 +52,14 @@ export const setColumn = (
   data?: MatchColumnsStepProps['data'],
 ): SpreadsheetColumn => {
   if (field?.fieldType.type === 'select') {
-    const fieldOptions = field.fieldType.options;
-    const uniqueData = uniqueEntries(
-      data || [],
-      oldColumn.index,
-    ) as SpreadsheetMatchedOptions[];
+    const entries = uniqueEntries(data || [], oldColumn.index).map(
+      ({ entry }) => entry as string,
+    );
 
-    const matchedOptions = uniqueData.map((record) => {
-      const value = fieldOptions.find(
-        (fieldOption) =>
-          fieldOption.value === record.entry ||
-          fieldOption.label === record.entry,
-      )?.value;
-      return value
-        ? ({ ...record, value } as SpreadsheetMatchedOptions)
-        : (record as SpreadsheetMatchedOptions);
-    });
-    const allMatched =
-      matchedOptions.filter((o) => o.value).length === uniqueData?.length;
-
-    return {
-      ...oldColumn,
-      type: allMatched
-        ? SpreadsheetColumnType.matchedSelectOptions
-        : SpreadsheetColumnType.matchedSelect,
-      value: field.key,
-      matchedOptions,
-    };
+    return buildMatchedSelectColumn(oldColumn, field, entries);
   }
 
   if (field?.fieldType.type === 'multiSelect') {
-    const fieldOptions = field.fieldType.options;
-
     let entries: string[] = [];
     try {
       entries = [
@@ -70,27 +83,7 @@ export const setColumn = (
       };
     }
 
-    const matchedOptions = entries.map((entry) => {
-      const value = fieldOptions.find(
-        (fieldOption) =>
-          fieldOption.value === entry || fieldOption.label === entry,
-      )?.value;
-      return value
-        ? ({ entry, value } as SpreadsheetMatchedOptions)
-        : ({ entry } as SpreadsheetMatchedOptions);
-    });
-    const areAllMatched =
-      matchedOptions.filter((option) => option.value).length ===
-      entries?.length;
-
-    return {
-      ...oldColumn,
-      type: areAllMatched
-        ? SpreadsheetColumnType.matchedSelectOptions
-        : SpreadsheetColumnType.matchedSelect,
-      value: field.key,
-      matchedOptions,
-    };
+    return buildMatchedSelectColumn(oldColumn, field, entries);
   }
 
   if (field?.fieldType.type === 'checkbox') {
