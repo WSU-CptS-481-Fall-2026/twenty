@@ -47,6 +47,11 @@ import { RoleValidationService } from 'src/engine/metadata-modules/role-validati
 import { WorkspaceMemberWorkspaceEntity } from 'src/modules/workspace-member/standard-objects/workspace-member.workspace-entity';
 import { CustomException } from 'src/utils/custom-exception';
 
+const invitationEmailMatches = (email: string) =>
+  Raw((alias) => `lower(${alias} ->> 'email') = lower(:email)`, {
+    email,
+  });
+
 @Injectable()
 export class WorkspaceInvitationService {
   constructor(
@@ -128,9 +133,7 @@ export class WorkspaceInvitationService {
         type: In(INVITATION_APP_TOKEN_TYPES),
         deletedAt: IsNull(),
         expiresAt: MoreThan(new Date()),
-        context: Raw((alias) => `lower(${alias} ->> 'email') = lower(:email)`, {
-          email,
-        }),
+        context: invitationEmailMatches(email),
       },
     });
   }
@@ -191,9 +194,7 @@ export class WorkspaceInvitationService {
       workspaceId: workspace.id,
       type: In(INVITATION_APP_TOKEN_TYPES),
       expiresAt: LessThanOrEqual(new Date()),
-      context: Raw((alias) => `lower(${alias} ->> 'email') = lower(:email)`, {
-        email,
-      }),
+      context: invitationEmailMatches(email),
     });
 
     return this.generateInvitationToken(
