@@ -445,7 +445,7 @@ export class AuthService {
     return { isValid: !!workspace };
   }
 
-  //DIFFERENT SERVICE
+
   async updatePassword(
     userId: string,
     newPassword: string,
@@ -512,6 +512,17 @@ export class AuthService {
       reason: UserSessionRevokedReason.PasswordChanged,
     });
 
+    this.sendPasswordUpdateNotifyEmail(user, curWorkSpace);
+
+    return { success: true };
+  }
+
+  async sendPasswordUpdateNotifyEmail(
+    user: UserEntity,
+    locale: UserWorkspaceEntity['locale'],
+  ): Promise<void> {
+    const [curWorkSpace] = user.userWorkspaces;
+
     const emailTemplate = PasswordUpdateNotifyEmail({
       userName: `${user.firstName} ${user.lastName}`,
       email: user.email,
@@ -535,8 +546,6 @@ export class AuthService {
       text,
       html,
     });
-
-    return { success: true };
   }
 
   async findWorkspaceFromInviteHashOrFail(
