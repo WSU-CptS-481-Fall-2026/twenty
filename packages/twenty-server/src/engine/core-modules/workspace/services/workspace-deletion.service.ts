@@ -51,6 +51,7 @@ import { WorkspaceSchemaService } from 'src/engine/workspace-datasource/workspac
 const WORKSPACE_APPLICATION_UNINSTALL_RETRY_LIMIT = 3;
 
 @Injectable()
+// oxlint-disable-next-line twenty/inject-workspace-repository
 export class WorkspaceDeletionService {
   private readonly logger = new Logger(WorkspaceDeletionService.name);
 

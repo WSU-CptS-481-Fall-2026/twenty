@@ -6,6 +6,7 @@ import { WorkspaceActivationStatus } from 'twenty-shared/workspace';
 
 import { PostgresAdvisoryLockService } from 'src/database/typeorm/postgres-advisory-lock.service';
 import { CoreEntityCacheService } from 'src/engine/core-entity-cache/services/core-entity-cache.service';
+import { PreInstalledAppsService } from 'src/engine/core-modules/application/pre-installed-apps/pre-installed-apps.service';
 import { BillingSubscriptionService } from 'src/engine/core-modules/billing/services/billing-subscription.service';
 import { BillingService } from 'src/engine/core-modules/billing/services/billing.service';
 import { DnsManagerService } from 'src/engine/core-modules/dns-manager/services/dns-manager.service';
@@ -14,8 +15,12 @@ import { SubdomainManagerService } from 'src/engine/core-modules/domain/subdomai
 import { FeatureFlagService } from 'src/engine/core-modules/feature-flag/services/feature-flag.service';
 import { MessageQueue } from 'src/engine/core-modules/message-queue/message-queue.constants';
 import { getQueueToken } from 'src/engine/core-modules/message-queue/utils/get-queue-token.util';
+import { SdkClientGenerationService } from 'src/engine/core-modules/sdk-client/sdk-client-generation.service';
 import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
+import { UpgradeMigrationService } from 'src/engine/core-modules/upgrade/services/upgrade-migration.service';
+import { UpgradeSequenceReaderService } from 'src/engine/core-modules/upgrade/services/upgrade-sequence-reader.service';
 import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
+import { UserWorkspaceService } from 'src/engine/core-modules/user-workspace/user-workspace.service';
 import { type AuthContextUser } from 'src/engine/core-modules/auth/types/auth-context.type';
 import { WorkspaceService } from 'src/engine/core-modules/workspace/services/workspace.service';
 import { WorkspaceDomainService } from 'src/engine/core-modules/workspace/services/workspace-domain.service';
@@ -28,11 +33,37 @@ import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadat
 import { WorkspaceCacheStorageService } from 'src/engine/workspace-cache-storage/workspace-cache-storage.service';
 import { WorkspaceSchemaService } from 'src/engine/workspace-datasource/workspace-schema.service';
 import { WorkspaceManagerService } from 'src/engine/workspace-manager/workspace-manager.service';
+import { PrefillLogicFunctionService } from 'src/engine/workspace-manager/standard-objects-prefill-data/services/prefill-logic-function.service';
+
+jest.mock(
+  'src/engine/workspace-manager/standard-objects-prefill-data/utils/prefill-companies.util',
+  () => ({ prefillCompanies: jest.fn() }),
+);
+jest.mock(
+  'src/engine/workspace-manager/standard-objects-prefill-data/utils/prefill-people.util',
+  () => ({ prefillPeople: jest.fn() }),
+);
+jest.mock(
+  'src/engine/workspace-manager/standard-objects-prefill-data/utils/prefill-workflows.util',
+  () => ({ prefillWorkflows: jest.fn() }),
+);
+jest.mock(
+  'src/engine/workspace-manager/standard-objects-prefill-data/utils/prefill-opportunities.util',
+  () => ({ prefillOpportunities: jest.fn() }),
+);
+jest.mock(
+  'src/engine/workspace-manager/standard-objects-prefill-data/utils/prefill-dashboards.util',
+  () => ({ prefillDashboards: jest.fn() }),
+);
+jest.mock(
+  'src/engine/workspace-manager/standard-objects-prefill-data/utils/prefill-workflow-command-menu-items.util',
+  () => ({ prefillWorkflowCommandMenuItems: jest.fn() }),
+);
 
 describe('WorkspaceService', () => {
   let service: WorkspaceService;
 
-  const workspaceId = 'workspace-id';
+  const workspaceId = '00000000-0000-4000-8000-000000000001';
   const user = { id: 'user-id' } as AuthContextUser;
   const workspace = {
     id: workspaceId,
@@ -53,7 +84,10 @@ describe('WorkspaceService', () => {
   const permissions = { userHasWorkspaceSettingPermission: jest.fn() };
   const config = { get: jest.fn() };
   const workspaceManager = { init: jest.fn() };
-  const billing = { isBillingEnabled: jest.fn() };
+  const billing = {
+    isBillingEnabled: jest.fn(),
+    hasWorkspaceAnySubscription: jest.fn(),
+  };
   const subscriptions = { cancelSubscription: jest.fn() };
   const eventEmitter = { emit: jest.fn() };
   const queue = { add: jest.fn() };
@@ -67,7 +101,7 @@ describe('WorkspaceService', () => {
     commitTransaction: jest.fn(),
     rollbackTransaction: jest.fn(),
     release: jest.fn(),
-    manager: { delete: jest.fn() },
+    manager: { delete: jest.fn(), update: jest.fn() },
   };
   const dataSource = {
     createQueryRunner: jest.fn(),
@@ -79,6 +113,16 @@ describe('WorkspaceService', () => {
   };
   const workspaceSchema = { deleteWorkspaceDBSchema: jest.fn() };
   const workspaceCache = { flush: jest.fn() };
+  const workspaceMembers = { createWorkspaceMember: jest.fn() };
+  const featureFlags = { enableFeatureFlags: jest.fn() };
+  const prefillLogicFunction = { ensureSeeded: jest.fn() };
+  const upgrades = {
+    getLastAttemptedInstanceCommandOrThrow: jest.fn(),
+    markAsWorkspaceInitial: jest.fn(),
+  };
+  const upgradeSequence = { getInitialCursorForNewWorkspace: jest.fn() };
+  const preInstalledApps = { enqueueInstallOnWorkspace: jest.fn() };
+  const sdkClient = { enqueueSdkClientGenerationForWorkspace: jest.fn() };
 
   beforeEach(async () => {
     workspaceRepository.findOneBy.mockResolvedValue({ ...workspace });
@@ -97,8 +141,15 @@ describe('WorkspaceService', () => {
     flatEntityMapsCache.getOrRecomputeManyOrAllFlatEntityMaps.mockResolvedValue(
       {
         flatFieldMetadataMaps: { byUniversalIdentifier: {} },
+        flatObjectMetadataMaps: {},
+        flatPageLayoutMaps: {},
       },
     );
+    upgrades.getLastAttemptedInstanceCommandOrThrow.mockResolvedValue({});
+    upgradeSequence.getInitialCursorForNewWorkspace.mockReturnValue({
+      name: 'initial',
+      status: 'successful',
+    });
 
     const module = await Test.createTestingModule({
       providers: [
@@ -121,7 +172,7 @@ describe('WorkspaceService', () => {
         { provide: WorkspaceManagerService, useValue: workspaceManager },
         {
           provide: FeatureFlagService,
-          useValue: { enableFeatureFlags: jest.fn() },
+          useValue: featureFlags,
         },
         { provide: BillingService, useValue: billing },
         { provide: BillingSubscriptionService, useValue: subscriptions },
@@ -145,6 +196,15 @@ describe('WorkspaceService', () => {
         },
         { provide: WorkspaceCacheStorageService, useValue: workspaceCache },
         { provide: WorkspaceSchemaService, useValue: workspaceSchema },
+        { provide: UserWorkspaceService, useValue: workspaceMembers },
+        {
+          provide: PrefillLogicFunctionService,
+          useValue: prefillLogicFunction,
+        },
+        { provide: UpgradeMigrationService, useValue: upgrades },
+        { provide: UpgradeSequenceReaderService, useValue: upgradeSequence },
+        { provide: PreInstalledAppsService, useValue: preInstalledApps },
+        { provide: SdkClientGenerationService, useValue: sdkClient },
       ],
     })
       .useMocker(() => ({}))
@@ -286,6 +346,38 @@ describe('WorkspaceService', () => {
   });
 
   describe('activateWorkspace', () => {
+    it('initializes the workspace before updating the activation state', async () => {
+      billing.hasWorkspaceAnySubscription.mockResolvedValue(true);
+
+      await expect(service.activateWorkspace(user, workspace)).resolves.toEqual(
+        workspace,
+      );
+
+      expect(workspaceManager.init).toHaveBeenCalledWith({
+        workspace,
+        userId: user.id,
+      });
+      expect(workspaceMembers.createWorkspaceMember).toHaveBeenCalledWith(
+        workspaceId,
+        user,
+      );
+      expect(queryRunner.manager.update).toHaveBeenCalledWith(
+        WorkspaceEntity,
+        workspaceId,
+        { activationStatus: WorkspaceActivationStatus.ACTIVE },
+      );
+      expect(queryRunner.commitTransaction).toHaveBeenCalledTimes(2);
+      expect(preInstalledApps.enqueueInstallOnWorkspace).toHaveBeenCalledWith(
+        workspaceId,
+      );
+      expect(
+        sdkClient.enqueueSdkClientGenerationForWorkspace,
+      ).toHaveBeenCalledWith(workspaceId);
+      expect(workspaceManager.init.mock.invocationCallOrder[0]).toBeLessThan(
+        queryRunner.manager.update.mock.invocationCallOrder[0],
+      );
+    });
+
     it('returns an already active workspace when activation was already completed', async () => {
       workspaceRepository.update.mockResolvedValue({ affected: 0 });
 

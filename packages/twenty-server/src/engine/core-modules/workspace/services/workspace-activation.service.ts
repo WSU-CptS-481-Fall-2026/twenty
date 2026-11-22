@@ -35,6 +35,7 @@ import { WorkspaceMigrationValidateBuildAndRunService } from 'src/engine/workspa
 const WORKSPACE_ACTIVATION_STALE_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
 
 @Injectable()
+// oxlint-disable-next-line twenty/inject-workspace-repository
 export class WorkspaceActivationService {
   private readonly logger = new Logger(WorkspaceActivationService.name);
 
