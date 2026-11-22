@@ -245,55 +245,6 @@ describe('ResetPasswordService', () => {
     });
   });
 
-  describe('sendEmailPasswordResetLink', () => {
-    const resetToken = {
-      workspaceId: workspace.id,
-      passwordResetToken: 'plain-token',
-      passwordResetTokenExpiresAt: new Date(Date.now() + 15 * 60 * 1000),
-    };
-
-    beforeEach(() => {
-      workspaceDomainsService.buildWorkspaceURL.mockReturnValue(
-        new URL('http://localhost:3001/reset-password/plain-token'),
-      );
-      jest.mocked(renderEmail).mockResolvedValue('rendered');
-      i18nService.getI18nInstance.mockReturnValue({
-        _: jest.fn().mockReturnValue('subject'),
-      } as unknown as ReturnType<I18nService['getI18nInstance']>);
-      twentyConfigService.get.mockReturnValue('Twenty' as never);
-    });
-
-    it('should send the email to a user who already has a password', async () => {
-      const result = await resetPasswordService.sendEmailPasswordResetLink({
-        resetToken,
-        user,
-        workspace,
-        locale: 'en',
-      });
-
-      expect(result).toEqual({ success: true });
-      expect(PasswordResetLinkEmail).toHaveBeenCalledWith(
-        expect.objectContaining({ hasPassword: true, locale: 'en' }),
-      );
-      expect(emailService.send).toHaveBeenCalledWith(
-        expect.objectContaining({ to: user.email, subject: 'subject' }),
-      );
-    });
-
-    it('should flag hasPassword as false for a user without a password', async () => {
-      await resetPasswordService.sendEmailPasswordResetLink({
-        resetToken,
-        user: { ...user, passwordHash: null } as unknown as UserEntity,
-        workspace,
-        locale: 'en',
-      });
-
-      expect(PasswordResetLinkEmail).toHaveBeenCalledWith(
-        expect.objectContaining({ hasPassword: false }),
-      );
-    });
-  });
-
   describe('validatePasswordResetToken', () => {
     it('should throw FORBIDDEN_EXCEPTION when the token is not found', async () => {
       appTokenRepository.findOne.mockResolvedValue(null);

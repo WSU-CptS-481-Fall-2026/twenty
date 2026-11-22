@@ -49,7 +49,7 @@ export class ResetPasswordService {
     private readonly userService: UserService,
   ) {}
 
-  async generateAndSendPasswordResetLink({
+async generateAndSendPasswordResetLink({
     email,
     workspaceId,
     locale,
@@ -58,10 +58,7 @@ export class ResetPasswordService {
     workspaceId?: string;
     locale: keyof typeof APP_LOCALES;
   }): Promise<void> {
-    const generationResult = await this.generatePasswordResetToken(
-      email,
-      workspaceId,
-    );
+    const generationResult = await this.generatePasswordResetToken(email, workspaceId);
 
     if (generationResult.status !== 'TOKEN_GENERATED') {
       this.logger.warn(
@@ -76,58 +73,12 @@ export class ResetPasswordService {
       resetToken: generationResult.resetToken,
     });
 
-    await this.sendEmailPasswordResetLink({
+    await this.passwordResetEmailService.sendPasswordResetLink({
       resetToken: generationResult.resetToken,
       user: generationResult.user,
       workspace: generationResult.workspace,
       locale,
     });
-  }
-
-  async generatePasswordResetToken(
-    email: string,
-    workspaceId?: string,
-  ): Promise<PasswordResetTokenGenerationResult> {
-    const user = await this.userService.findUserByEmail(email);
-
-    if (!isDefined(user)) {
-      return { status: 'USER_NOT_FOUND' };
-    }
-
-    const targetWorkspace = await this.resolveTargetWorkspace(
-      user.id,
-      workspaceId,
-    );
-
-    if (!isDefined(targetWorkspace)) {
-      return { status: 'NO_PASSWORD_AUTH_ENABLED_WORKSPACE_FOUND' };
-    }
-
-    const expiresIn = this.twentyConfigService.get(
-      'PASSWORD_RESET_TOKEN_EXPIRES_IN',
-    );
-
-    if (!expiresIn) {
-      throw new AuthException(
-        'PASSWORD_RESET_TOKEN_EXPIRES_IN constant value not found',
-        AuthExceptionCode.INTERNAL_SERVER_ERROR,
-      );
-    }
-
-    const expiresAt = addMilliseconds(new Date().getTime(), ms(expiresIn));
-
-    const plainResetToken = crypto.randomBytes(32).toString('hex');
-
-    return {
-      status: 'TOKEN_GENERATED',
-      resetToken: {
-        workspaceId: targetWorkspace.id,
-        passwordResetToken: plainResetToken,
-        passwordResetTokenExpiresAt: expiresAt,
-      },
-      user,
-      workspace: targetWorkspace,
-    };
   }
 
   async rotatePasswordResetToken({
@@ -188,76 +139,6 @@ export class ResetPasswordService {
     return isDefined(requestedWorkspace)
       ? requestedWorkspace
       : this.findFirstPasswordAuthEnabledWorkspace(userId);
-  }
-
-  async sendEmailPasswordResetLink({
-    resetToken,
-    user,
-    workspace,
-    locale,
-  }: {
-    resetToken: PasswordResetToken;
-    user: UserEntity;
-    workspace: WorkspaceEntity;
-    locale: keyof typeof APP_LOCALES;
-  }): Promise<EmailPasswordResetLinkDTO> {
-    const hasPassword = isDefined(user.passwordHash);
-
-    const resetPasswordPath = getAppPath(AppPath.ResetPassword, {
-      passwordResetToken: resetToken.passwordResetToken,
-    });
-
-    const link = this.workspaceDomainsService.buildWorkspaceURL({
-      workspace,
-      pathname: resetPasswordPath,
-    });
-
-    await this.sendPasswordEmail(workspace.locale);
-
-    return { success: true };
-  }
-
-  private async sendPasswordEmail(
-    locale: UserWorkspaceEntity['locale'],
-    hasPassword: boolean,
-    resetToken: PasswordResetToken
-  ): Promise<void> {
-
-    const emailData = {
-      link: link.toString(),
-      duration: ms(
-        differenceInMilliseconds(
-          resetToken.passwordResetTokenExpiresAt,
-          new Date(),
-        ),
-        {
-          long: true,
-        },
-      ),
-      hasPassword,
-      locale,
-    };
-
-    const emailTemplate = PasswordResetLinkEmail(emailData);
-
-    const html = await renderEmail(emailTemplate, { pretty: true });
-    const text = await renderEmail(emailTemplate, { plainText: true });
-
-    const i18n = this.i18nService.getI18nInstance(locale);
-    const subjectTemplate = hasPassword
-      ? msg`Action Needed to Reset Password`
-      : msg`Action Needed to Set Password`;
-    const subject = i18n._(subjectTemplate);
-
-    await this.emailService.send({
-      from: `${this.twentyConfigService.get(
-        'EMAIL_FROM_NAME',
-      )} <${this.twentyConfigService.get('EMAIL_FROM_ADDRESS')}>`,
-      to: user.email,
-      subject,
-      text,
-      html,
-    });
   }
 
   async validatePasswordResetToken(
