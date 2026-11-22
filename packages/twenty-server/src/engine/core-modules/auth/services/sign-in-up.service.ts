@@ -688,6 +688,74 @@ export class SignInUpService {
     }
   }
 
+  private async createSignupWorkspace({
+    workspaceId,
+    workspaceCustomApplicationId,
+    requestedSubdomain,
+    displayName,
+    email,
+    isWorkEmailFound,
+    queryRunner,
+  }: {
+    workspaceId: string;
+    workspaceCustomApplicationId: string;
+    requestedSubdomain: string | undefined;
+    displayName: string;
+    email: string;
+    isWorkEmailFound: boolean;
+    queryRunner: QueryRunner;
+  }) {
+    const workspaceToCreate = this.workspaceRepository.create({
+      id: workspaceId,
+      subdomain: isDefined(requestedSubdomain)
+        ? requestedSubdomain
+        : await this.subdomainManagerService.generateSubdomain(
+            isWorkEmailFound ? { userEmail: email } : {},
+          ),
+      workspaceCustomApplicationId,
+      displayName,
+      inviteHash: v4(),
+      activationStatus: WorkspaceActivationStatus.PENDING_CREATION,
+    });
+
+    return queryRunner.manager.save(WorkspaceEntity, workspaceToCreate);
+  }
+
+  private async recordSignupDpa({
+    workspaceId,
+    userId,
+    email,
+    queryRunner,
+  }: {
+    workspaceId: string;
+    userId: string;
+    email: string;
+    queryRunner: QueryRunner;
+  }): Promise<void> {
+    // Click-through DPA: the DPA is incorporated by reference into the
+    // ToS/signup, so acceptance = execution. Only relevant on Twenty's
+    // managed cloud (multi-workspace), where Twenty is the Processor
+    // hosting the data; on self-hosted deployments Twenty is not the
+    // Processor, so there is nothing to record. Done atomically with
+    // workspace creation so we can later prove what was agreed. (Billing
+    // is an independent feature flag and must not be used to detect cloud.)
+    if (this.twentyConfigService.get('IS_MULTIWORKSPACE_ENABLED') === true) {
+      await queryRunner.manager.save(
+        DpaAgreementEntity,
+        buildDpaAgreementRecord({
+          workspaceId,
+          type: DpaAgreementType.CLICK_THROUGH,
+          region:
+            this.twentyConfigService.get('DPA_DEPLOYMENT_REGION') ??
+            DEFAULT_DPA_REGION,
+          acceptedAt: new Date(),
+          acceptedByUserId: userId,
+          acceptedByEmail: email,
+        }),
+      );
+    }
+  }
+
   async signUpOnNewWorkspace(
     userData: ExistingUserOrPartialUserWithPicture['userData'],
     options?: { displayName?: string; subdomain?: string },
@@ -741,23 +809,15 @@ export class SignInUpService {
         await this.dataSource.transaction(async (entityManager) => {
           const queryRunner = entityManager.queryRunner as QueryRunner;
 
-          const workspaceToCreate = this.workspaceRepository.create({
-            id: workspaceId,
-            subdomain: isDefined(requestedSubdomain)
-              ? requestedSubdomain
-              : await this.subdomainManagerService.generateSubdomain(
-                  isWorkEmailFound ? { userEmail: email } : {},
-                ),
+          const workspace = await this.createSignupWorkspace({
+            workspaceId,
             workspaceCustomApplicationId,
+            requestedSubdomain,
             displayName,
-            inviteHash: v4(),
-            activationStatus: WorkspaceActivationStatus.PENDING_CREATION,
+            email,
+            isWorkEmailFound,
+            queryRunner,
           });
-
-          const workspace = await queryRunner.manager.save(
-            WorkspaceEntity,
-            workspaceToCreate,
-          );
 
           const customApplication =
             await this.applicationService.createWorkspaceCustomApplication(
@@ -813,30 +873,12 @@ export class SignInUpService {
             queryRunner,
           );
 
-          // Click-through DPA: the DPA is incorporated by reference into the
-          // ToS/signup, so acceptance = execution. Only relevant on Twenty's
-          // managed cloud (multi-workspace), where Twenty is the Processor
-          // hosting the data; on self-hosted deployments Twenty is not the
-          // Processor, so there is nothing to record. Done atomically with
-          // workspace creation so we can later prove what was agreed. (Billing
-          // is an independent feature flag and must not be used to detect cloud.)
-          if (
-            this.twentyConfigService.get('IS_MULTIWORKSPACE_ENABLED') === true
-          ) {
-            await queryRunner.manager.save(
-              DpaAgreementEntity,
-              buildDpaAgreementRecord({
-                workspaceId: workspace.id,
-                type: DpaAgreementType.CLICK_THROUGH,
-                region:
-                  this.twentyConfigService.get('DPA_DEPLOYMENT_REGION') ??
-                  DEFAULT_DPA_REGION,
-                acceptedAt: new Date(),
-                acceptedByUserId: user.id,
-                acceptedByEmail: email,
-              }),
-            );
-          }
+          await this.recordSignupDpa({
+            workspaceId: workspace.id,
+            userId: user.id,
+            email,
+            queryRunner,
+          });
 
           return {
             user,
