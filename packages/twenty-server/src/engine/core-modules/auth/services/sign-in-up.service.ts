@@ -427,7 +427,7 @@ export class SignInUpService {
     return savedUser;
   }
 
-  async signUpOnNewWorkspace(
+  private async validateWorkspaceSignup(
     userData: ExistingUserOrPartialUserWithPicture['userData'],
     options?: { displayName?: string; subdomain?: string },
   ) {
@@ -467,6 +467,16 @@ export class SignInUpService {
         requestedSubdomain,
       );
     }
+
+    return { email, displayName, requestedSubdomain };
+  }
+
+  async signUpOnNewWorkspace(
+    userData: ExistingUserOrPartialUserWithPicture['userData'],
+    options?: { displayName?: string; subdomain?: string },
+  ) {
+    const { email, displayName, requestedSubdomain } =
+      await this.validateWorkspaceSignup(userData, options);
 
     const shouldGrantServerAdmin =
       !(await this.signupPolicyService.hasServerAdmin());

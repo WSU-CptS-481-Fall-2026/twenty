@@ -10,6 +10,7 @@ import {
 import { ApplicationService } from 'src/engine/core-modules/application/application.service';
 import { AuthProviderEnum } from 'src/engine/core-modules/workspace/types/workspace.type';
 import { SignInUpService } from 'src/engine/core-modules/auth/services/sign-in-up.service';
+import { MAX_WORKSPACES_WITHOUT_ENTERPRISE_KEY } from 'src/engine/core-modules/auth/constants/max-workspaces-without-enterprise-key.constants';
 import { SignupOnboardingInitializationService } from 'src/engine/core-modules/auth/services/signup-onboarding-initialization.service';
 import { SignupPolicyService } from 'src/engine/core-modules/auth/services/signup-policy.service';
 import { SignupWorkspaceCreationService } from 'src/engine/core-modules/auth/services/signup-workspace-creation.service';
@@ -59,7 +60,7 @@ describe('SignInUpService', () => {
     },
   };
   const existingUser = { type: 'existingUser' as const, existingUser: user };
-  const authParams = { provider: AuthProviderEnum.Google };
+  const authParams = { provider: AuthProviderEnum.Google } as const;
 
   const userRepository = {
     create: jest.fn(),
@@ -357,6 +358,28 @@ describe('SignInUpService', () => {
     expect(result.workspace.logoFileId).toBeUndefined();
   });
 
+  it('reports an inferred logo update failure and cleans up the upload', async () => {
+    const error = new Error('update failed');
+    picture.uploadWorkspaceLogoFromUrl.mockResolvedValue({ id: 'logo-id' });
+    workspaceRepository.update.mockRejectedValue(error);
+
+    const result = await service.signUpOnNewWorkspace(newUser, {
+      displayName: 'Name',
+    });
+
+    expect(exceptionHandler.captureExceptions).toHaveBeenCalledWith(
+      [error],
+      expect.objectContaining({
+        workspace: { id: result.workspace.id },
+        additionalData: { source: 'inferred-workspace-logo' },
+      }),
+    );
+    expect(picture.deleteCorePicture).toHaveBeenCalledWith({
+      fileId: 'logo-id',
+      workspaceId: result.workspace.id,
+    });
+  });
+
   it('returns the inferred logo and creates a billing customer when enabled', async () => {
     picture.uploadWorkspaceLogoFromUrl.mockResolvedValue({ id: 'logo-id' });
     billing.isBillingEnabled.mockReturnValue(true);
@@ -406,6 +429,41 @@ describe('SignInUpService', () => {
     await expect(
       service.signUpOnNewWorkspace(existingUser, { displayName: 'Name' }),
     ).rejects.toThrow('New workspace setup is disabled');
+  });
+
+  it('rejects workspace creation at the unlicensed workspace limit', async () => {
+    workspaceRepository.count.mockResolvedValue(
+      MAX_WORKSPACES_WITHOUT_ENTERPRISE_KEY,
+    );
+    enterprise.isValid.mockReturnValue(false);
+
+    await expect(
+      service.signUpOnNewWorkspace(existingUser, { displayName: 'Name' }),
+    ).rejects.toThrow('without a valid enterprise key');
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty workspace name before starting a transaction', async () => {
+    await expect(
+      service.signUpOnNewWorkspace(existingUser, { displayName: '  ' }),
+    ).rejects.toThrow('Workspace name is required');
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('creates a self-hosted first workspace without a cloud DPA', async () => {
+    config.get.mockReturnValue(false);
+
+    await service.signUpOnNewWorkspace(existingUser, { displayName: 'Name' });
+
+    expect(queryRunner.manager.save).not.toHaveBeenCalledWith(
+      DpaAgreementEntity,
+      expect.anything(),
+    );
+    expect(userWorkspace.create).toHaveBeenCalledWith(
+      expect.objectContaining({ isExistingUser: true }),
+      queryRunner,
+    );
+    expect(userRepository.create).not.toHaveBeenCalled();
   });
 
   it('rejects duplicate users signing up without a workspace', async () => {

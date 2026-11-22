@@ -20,6 +20,7 @@ import { WorkspaceInvitationService } from 'src/engine/core-modules/workspace-in
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 
 @Injectable()
+// oxlint-disable-next-line twenty/inject-workspace-repository
 export class SignupPolicyService {
   constructor(
     @InjectRepository(UserEntity)
