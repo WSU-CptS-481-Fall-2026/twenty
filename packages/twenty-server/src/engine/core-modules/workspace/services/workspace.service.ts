@@ -110,45 +110,46 @@ export class WorkspaceService {
       microsoft: this.twentyConfigService.get('AUTH_MICROSOFT_ENABLED'),
     };
 
-    if (payload.isGoogleAuthEnabled && !authProvidersBySystem.google) {
+    this.validateProviderEnabled(
+      'Google',
+      payload.isGoogleAuthEnabled,
+      authProvidersBySystem.google,
+    );
+    this.validateProviderEnabled(
+      'Microsoft',
+      payload.isMicrosoftAuthEnabled,
+      authProvidersBySystem.microsoft,
+    );
+    this.validateProviderEnabled(
+      'Password',
+      payload.isPasswordAuthEnabled,
+      authProvidersBySystem.password,
+    );
+    this.validateProviderEnabled(
+      'Google',
+      payload.isGoogleAuthBypassEnabled,
+      authProvidersBySystem.google,
+    );
+    this.validateProviderEnabled(
+      'Microsoft',
+      payload.isMicrosoftAuthBypassEnabled,
+      authProvidersBySystem.microsoft,
+    );
+    this.validateProviderEnabled(
+      'Password',
+      payload.isPasswordAuthBypassEnabled,
+      authProvidersBySystem.password,
+    );
+  }
+
+  private validateProviderEnabled(
+    provider: 'Google' | 'Microsoft' | 'Password',
+    enabled: boolean | undefined,
+    systemEnabled: boolean,
+  ): void {
+    if (enabled && !systemEnabled) {
       throw new WorkspaceException(
-        'Google auth is not enabled in the system.',
-        WorkspaceExceptionCode.ENVIRONMENT_VAR_NOT_ENABLED,
-      );
-    }
-    if (payload.isMicrosoftAuthEnabled && !authProvidersBySystem.microsoft) {
-      throw new WorkspaceException(
-        'Microsoft auth is not enabled in the system.',
-        WorkspaceExceptionCode.ENVIRONMENT_VAR_NOT_ENABLED,
-      );
-    }
-    if (payload.isPasswordAuthEnabled && !authProvidersBySystem.password) {
-      throw new WorkspaceException(
-        'Password auth is not enabled in the system.',
-        WorkspaceExceptionCode.ENVIRONMENT_VAR_NOT_ENABLED,
-      );
-    }
-    if (payload.isGoogleAuthBypassEnabled && !authProvidersBySystem.google) {
-      throw new WorkspaceException(
-        'Google auth is not enabled in the system.',
-        WorkspaceExceptionCode.ENVIRONMENT_VAR_NOT_ENABLED,
-      );
-    }
-    if (
-      payload.isMicrosoftAuthBypassEnabled &&
-      !authProvidersBySystem.microsoft
-    ) {
-      throw new WorkspaceException(
-        'Microsoft auth is not enabled in the system.',
-        WorkspaceExceptionCode.ENVIRONMENT_VAR_NOT_ENABLED,
-      );
-    }
-    if (
-      payload.isPasswordAuthBypassEnabled &&
-      !authProvidersBySystem.password
-    ) {
-      throw new WorkspaceException(
-        'Password auth is not enabled in the system.',
+        `${provider} auth is not enabled in the system.`,
         WorkspaceExceptionCode.ENVIRONMENT_VAR_NOT_ENABLED,
       );
     }

@@ -222,6 +222,36 @@ describe('WorkspaceService', () => {
       },
     );
 
+    it('allows disabling an authentication provider that is disabled system-wide', async () => {
+      config.get.mockReturnValue(false);
+
+      await expect(
+        service.updateWorkspaceById({
+          payload: { id: workspaceId, isGoogleAuthEnabled: false },
+          userWorkspaceId: 'membership-id',
+          apiKey: undefined,
+        }),
+      ).resolves.toEqual(
+        expect.objectContaining({ isGoogleAuthEnabled: false }),
+      );
+    });
+
+    it('reports the first disabled provider in the existing validation order', async () => {
+      config.get.mockReturnValue(false);
+
+      await expect(
+        service.updateWorkspaceById({
+          payload: {
+            id: workspaceId,
+            isGoogleAuthEnabled: true,
+            isMicrosoftAuthEnabled: true,
+          },
+          userWorkspaceId: 'membership-id',
+          apiKey: undefined,
+        }),
+      ).rejects.toThrow('Google auth is not enabled in the system.');
+    });
+
     it('validates changed subdomains before saving', async () => {
       await service.updateWorkspaceById({
         payload: { id: workspaceId, subdomain: 'changed' },
