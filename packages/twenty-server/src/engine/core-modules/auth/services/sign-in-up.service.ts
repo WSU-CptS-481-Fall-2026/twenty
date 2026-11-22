@@ -37,10 +37,8 @@ import {
   compareHash,
   hashPassword,
 } from 'src/engine/core-modules/auth/auth.util';
-import { MAX_WORKSPACES_WITHOUT_ENTERPRISE_KEY } from 'src/engine/core-modules/auth/constants/max-workspaces-without-enterprise-key.constants';
-import { getSignUpWithoutWorkspaceDecision } from 'src/engine/core-modules/auth/utils/get-sign-up-without-workspace-decision.util';
-import { hasProvisionedSignUpDestination } from 'src/engine/core-modules/auth/utils/has-provisioned-sign-up-destination.util';
 import { SignupOnboardingInitializationService } from 'src/engine/core-modules/auth/services/signup-onboarding-initialization.service';
+import { SignupPolicyService } from 'src/engine/core-modules/auth/services/signup-policy.service';
 import { DEFAULT_DPA_REGION } from 'src/engine/core-modules/dpa/config/dpa-region-config.constant';
 import { DpaAgreementEntity } from 'src/engine/core-modules/dpa/entities/dpa-agreement.entity';
 import { DpaAgreementType } from 'src/engine/core-modules/dpa/enums/dpa-agreement-type.enum';
@@ -53,7 +51,6 @@ import {
   type SignInUpNewUserPayload,
 } from 'src/engine/core-modules/auth/types/signInUp.type';
 import { SubdomainManagerService } from 'src/engine/core-modules/domain/subdomain-manager/services/subdomain-manager.service';
-import { EnterprisePlanService } from 'src/engine/core-modules/enterprise/services/enterprise-plan.service';
 import { ExceptionHandlerService } from 'src/engine/core-modules/exception-handler/exception-handler.service';
 import { FileCorePictureService } from 'src/engine/core-modules/file/file-core-picture/services/file-core-picture.service';
 import { MetricsService } from 'src/engine/core-modules/metrics/metrics.service';
@@ -90,6 +87,7 @@ export class SignInUpService {
     private readonly userWorkspaceService: UserWorkspaceService,
     private readonly onboardingService: OnboardingService,
     private readonly signupOnboardingInitializationService: SignupOnboardingInitializationService,
+    private readonly signupPolicyService: SignupPolicyService,
     private readonly workspaceEventEmitter: WorkspaceEventEmitter,
     private readonly twentyConfigService: TwentyConfigService,
     private readonly subdomainManagerService: SubdomainManagerService,
@@ -99,7 +97,6 @@ export class SignInUpService {
     private readonly applicationService: ApplicationService,
     private readonly fileCorePictureService: FileCorePictureService,
     private readonly exceptionHandlerService: ExceptionHandlerService,
-    private readonly enterprisePlanService: EnterprisePlanService,
     private readonly eventLogEmitterService: EventLogEmitterService,
     private readonly billingCreditService: BillingCreditService,
     private readonly billingService: BillingService,
@@ -441,139 +438,6 @@ export class SignInUpService {
     return savedUser;
   }
 
-  private async isSignUpEnabled(): Promise<boolean> {
-    const workspaceCount = await this.workspaceRepository.count();
-
-    return (
-      this.twentyConfigService.get('IS_MULTIWORKSPACE_ENABLED') ||
-      workspaceCount === 0
-    );
-  }
-
-  private async assertSignUpEnabled(): Promise<void> {
-    if (!(await this.isSignUpEnabled())) {
-      throw new AuthException(
-        'New workspace setup is disabled',
-        AuthExceptionCode.SIGNUP_DISABLED,
-      );
-    }
-  }
-
-  // Enforced here rather than at workspace creation so a restricted instance
-  // stops accumulating verified users that can never reach a workspace.
-  private async assertSignUpWithoutWorkspaceAllowed(
-    email: string,
-  ): Promise<void> {
-    const decision = getSignUpWithoutWorkspaceDecision({
-      isMultiWorkspaceEnabled: this.twentyConfigService.get(
-        'IS_MULTIWORKSPACE_ENABLED',
-      ),
-      isWorkspaceCreationLimitedToServerAdmins: this.twentyConfigService.get(
-        'IS_WORKSPACE_CREATION_LIMITED_TO_SERVER_ADMINS',
-      ),
-      workspaceCount: await this.workspaceRepository.count(),
-    });
-
-    if (decision === 'allowed') {
-      return;
-    }
-
-    if (
-      decision === 'requiresDestination' &&
-      (await this.hasProvisionedDestination(email))
-    ) {
-      return;
-    }
-
-    throw new AuthException(
-      'New workspace setup is disabled',
-      AuthExceptionCode.SIGNUP_DISABLED,
-    );
-  }
-
-  private async hasProvisionedDestination(email: string): Promise<boolean> {
-    // Invitations are read directly instead of through the sign-in picker,
-    // which hides HIDDEN workspaces: that is a listing rule, not a statement
-    // that the invitee has nowhere to land.
-    const invitations =
-      await this.workspaceInvitationService.findInvitationsByEmail(email);
-
-    if (hasProvisionedSignUpDestination(invitations)) {
-      return true;
-    }
-
-    const { availableWorkspacesForSignUp } =
-      await this.userWorkspaceService.findAvailableWorkspacesByEmail(email);
-
-    return hasProvisionedSignUpDestination(availableWorkspacesForSignUp);
-  }
-
-  private async hasServerAdmin(): Promise<boolean> {
-    const adminCount = await this.userRepository.count({
-      where: { canAccessFullAdminPanel: true },
-    });
-
-    return adminCount > 0;
-  }
-
-  private async assertWorkspaceCreationAllowed(
-    userData: ExistingUserOrPartialUserWithPicture['userData'],
-  ): Promise<void> {
-    await this.assertSignUpEnabled();
-
-    const workspaceCount = await this.workspaceRepository.count();
-
-    if (workspaceCount === 0) {
-      return;
-    }
-
-    await this.assertWorkspaceCountWithinLimit(workspaceCount);
-
-    if (
-      !this.twentyConfigService.get(
-        'IS_WORKSPACE_CREATION_LIMITED_TO_SERVER_ADMINS',
-      )
-    ) {
-      return;
-    }
-
-    const isExistingAdmin =
-      userData.type === 'existingUser' &&
-      userData.existingUser.canAccessFullAdminPanel;
-
-    if (isExistingAdmin) {
-      return;
-    }
-
-    throw new AuthException(
-      'Workspace creation is restricted to admins',
-      AuthExceptionCode.FORBIDDEN_EXCEPTION,
-      {
-        userFriendlyMessage: msg`Workspace creation is restricted to admins`,
-      },
-    );
-  }
-
-  private async assertWorkspaceCountWithinLimit(
-    workspaceCount: number,
-  ): Promise<void> {
-    if (this.enterprisePlanService.isValid()) {
-      return;
-    }
-
-    if (workspaceCount < MAX_WORKSPACES_WITHOUT_ENTERPRISE_KEY) {
-      return;
-    }
-
-    throw new AuthException(
-      `Cannot create more than ${MAX_WORKSPACES_WITHOUT_ENTERPRISE_KEY} workspaces without a valid enterprise key`,
-      AuthExceptionCode.FORBIDDEN_EXCEPTION,
-      {
-        userFriendlyMessage: msg`Workspace limit reached. A valid enterprise key is required to create more workspaces.`,
-      },
-    );
-  }
-
   private async deleteInferredWorkspaceLogo({
     fileId,
     workspaceId,
@@ -747,7 +611,7 @@ export class SignInUpService {
       );
     }
 
-    await this.assertWorkspaceCreationAllowed(userData);
+    await this.signupPolicyService.assertWorkspaceCreationAllowed(userData);
 
     const displayName = options?.displayName?.trim();
 
@@ -769,7 +633,8 @@ export class SignInUpService {
       );
     }
 
-    const shouldGrantServerAdmin = !(await this.hasServerAdmin());
+    const shouldGrantServerAdmin =
+      !(await this.signupPolicyService.hasServerAdmin());
 
     const isWorkEmailFound = isWorkEmail(email);
 
@@ -922,9 +787,12 @@ export class SignInUpService {
       );
     }
 
-    await this.assertSignUpWithoutWorkspaceAllowed(newUserParams.email);
+    await this.signupPolicyService.assertSignUpWithoutWorkspaceAllowed(
+      newUserParams.email,
+    );
 
-    const shouldGrantServerAdmin = !(await this.hasServerAdmin());
+    const shouldGrantServerAdmin =
+      !(await this.signupPolicyService.hasServerAdmin());
 
     return this.saveNewUser(
       await this.computePartialUserFromUserPayload(newUserParams, authParams),

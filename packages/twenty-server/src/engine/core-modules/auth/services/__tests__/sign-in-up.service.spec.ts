@@ -11,6 +11,7 @@ import { ApplicationService } from 'src/engine/core-modules/application/applicat
 import { AuthProviderEnum } from 'src/engine/core-modules/workspace/types/workspace.type';
 import { SignInUpService } from 'src/engine/core-modules/auth/services/sign-in-up.service';
 import { SignupOnboardingInitializationService } from 'src/engine/core-modules/auth/services/signup-onboarding-initialization.service';
+import { SignupPolicyService } from 'src/engine/core-modules/auth/services/signup-policy.service';
 import { BillingCreditService } from 'src/engine/core-modules/billing/services/billing-credit.service';
 import { BillingService } from 'src/engine/core-modules/billing/services/billing.service';
 import { DpaAgreementEntity } from 'src/engine/core-modules/dpa/entities/dpa-agreement.entity';
@@ -155,6 +156,7 @@ describe('SignInUpService', () => {
       providers: [
         SignInUpService,
         SignupOnboardingInitializationService,
+        SignupPolicyService,
         { provide: getRepositoryToken(UserEntity), useValue: userRepository },
         {
           provide: getRepositoryToken(WorkspaceEntity),

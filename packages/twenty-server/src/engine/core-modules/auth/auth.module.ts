@@ -28,6 +28,7 @@ import { MicrosoftAPIsService } from 'src/engine/core-modules/auth/services/micr
 import { ResetPasswordService } from 'src/engine/core-modules/auth/services/reset-password.service';
 import { SignInUpService } from 'src/engine/core-modules/auth/services/sign-in-up.service';
 import { SignupOnboardingInitializationService } from 'src/engine/core-modules/auth/services/signup-onboarding-initialization.service';
+import { SignupPolicyService } from 'src/engine/core-modules/auth/services/signup-policy.service';
 import { UpdateConnectedAccountOnReconnectService } from 'src/engine/core-modules/auth/services/update-connected-account-on-reconnect.service';
 import { SamlAuthStrategy } from 'src/engine/core-modules/auth/strategies/saml.auth.strategy';
 import { AccessTokenService } from 'src/engine/core-modules/auth/token/services/access-token.service';
@@ -150,6 +151,7 @@ import { JwtAuthStrategy } from './strategies/jwt.auth.strategy';
   providers: [
     SignInUpService,
     SignupOnboardingInitializationService,
+    SignupPolicyService,
     AuthService,
     JwtAuthStrategy,
     SamlAuthStrategy,
