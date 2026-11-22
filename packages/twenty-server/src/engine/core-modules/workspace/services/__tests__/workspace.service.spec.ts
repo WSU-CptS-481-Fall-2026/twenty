@@ -21,6 +21,7 @@ import { WorkspaceService } from 'src/engine/core-modules/workspace/services/wor
 import { WorkspaceDomainService } from 'src/engine/core-modules/workspace/services/workspace-domain.service';
 import { WorkspaceActivationService } from 'src/engine/core-modules/workspace/services/workspace-activation.service';
 import { WorkspaceDeletionService } from 'src/engine/core-modules/workspace/services/workspace-deletion.service';
+import { WorkspacePermissionValidationService } from 'src/engine/core-modules/workspace/services/workspace-permission-validation.service';
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 import { PermissionsService } from 'src/engine/metadata-modules/permissions/permissions.service';
 import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.service';
@@ -105,6 +106,7 @@ describe('WorkspaceService', () => {
         WorkspaceDomainService,
         WorkspaceActivationService,
         WorkspaceDeletionService,
+        WorkspacePermissionValidationService,
         {
           provide: getRepositoryToken(WorkspaceEntity),
           useValue: workspaceRepository,
