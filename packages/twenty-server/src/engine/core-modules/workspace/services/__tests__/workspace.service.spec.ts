@@ -1,6 +1,6 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
+import { getDataSourceToken, getRepositoryToken } from '@nestjs/typeorm';
 
 import { WorkspaceActivationStatus } from 'twenty-shared/workspace';
 
@@ -20,8 +20,12 @@ import { type AuthContextUser } from 'src/engine/core-modules/auth/types/auth-co
 import { WorkspaceService } from 'src/engine/core-modules/workspace/services/workspace.service';
 import { WorkspaceDomainService } from 'src/engine/core-modules/workspace/services/workspace-domain.service';
 import { WorkspaceActivationService } from 'src/engine/core-modules/workspace/services/workspace-activation.service';
+import { WorkspaceDeletionService } from 'src/engine/core-modules/workspace/services/workspace-deletion.service';
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 import { PermissionsService } from 'src/engine/metadata-modules/permissions/permissions.service';
+import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.service';
+import { WorkspaceCacheStorageService } from 'src/engine/workspace-cache-storage/workspace-cache-storage.service';
+import { WorkspaceSchemaService } from 'src/engine/workspace-datasource/workspace-schema.service';
 import { WorkspaceManagerService } from 'src/engine/workspace-manager/workspace-manager.service';
 
 describe('WorkspaceService', () => {
@@ -41,6 +45,7 @@ describe('WorkspaceService', () => {
     update: jest.fn(),
     save: jest.fn(),
     softDelete: jest.fn(),
+    delete: jest.fn(),
   };
   const userWorkspaceRepository = { find: jest.fn() };
   const cache = { invalidate: jest.fn() };
@@ -55,6 +60,24 @@ describe('WorkspaceService', () => {
   const subdomainManager = { validateSubdomainOrThrow: jest.fn() };
   const customDomainManager = { setCustomDomain: jest.fn() };
   const dnsManager = { deleteHostnameSilently: jest.fn() };
+  const queryRunner = {
+    connect: jest.fn(),
+    startTransaction: jest.fn(),
+    commitTransaction: jest.fn(),
+    rollbackTransaction: jest.fn(),
+    release: jest.fn(),
+    manager: { delete: jest.fn() },
+  };
+  const dataSource = {
+    createQueryRunner: jest.fn(),
+    getRepository: jest.fn(),
+  };
+  const flatEntityMapsCache = {
+    getOrRecomputeManyOrAllFlatEntityMaps: jest.fn(),
+    flushFlatEntityMaps: jest.fn(),
+  };
+  const workspaceSchema = { deleteWorkspaceDBSchema: jest.fn() };
+  const workspaceCache = { flush: jest.fn() };
 
   beforeEach(async () => {
     workspaceRepository.findOneBy.mockResolvedValue({ ...workspace });
@@ -65,12 +88,23 @@ describe('WorkspaceService', () => {
     permissions.userHasWorkspaceSettingPermission.mockResolvedValue(true);
     config.get.mockReturnValue(true);
     billing.isBillingEnabled.mockReturnValue(false);
+    queryRunner.manager.delete.mockResolvedValue({ affected: 0 });
+    dataSource.createQueryRunner.mockReturnValue(queryRunner);
+    dataSource.getRepository.mockReturnValue({
+      find: jest.fn().mockResolvedValue([]),
+    });
+    flatEntityMapsCache.getOrRecomputeManyOrAllFlatEntityMaps.mockResolvedValue(
+      {
+        flatFieldMetadataMaps: { byUniversalIdentifier: {} },
+      },
+    );
 
     const module = await Test.createTestingModule({
       providers: [
         WorkspaceService,
         WorkspaceDomainService,
         WorkspaceActivationService,
+        WorkspaceDeletionService,
         {
           provide: getRepositoryToken(WorkspaceEntity),
           useValue: workspaceRepository,
@@ -102,6 +136,13 @@ describe('WorkspaceService', () => {
         { provide: SubdomainManagerService, useValue: subdomainManager },
         { provide: CustomDomainManagerService, useValue: customDomainManager },
         { provide: DnsManagerService, useValue: dnsManager },
+        { provide: getDataSourceToken(), useValue: dataSource },
+        {
+          provide: WorkspaceManyOrAllFlatEntityMapsCacheService,
+          useValue: flatEntityMapsCache,
+        },
+        { provide: WorkspaceCacheStorageService, useValue: workspaceCache },
+        { provide: WorkspaceSchemaService, useValue: workspaceSchema },
       ],
     })
       .useMocker(() => ({}))
@@ -271,6 +312,30 @@ describe('WorkspaceService', () => {
       await expect(service.deleteWorkspace(workspaceId)).rejects.toThrow(
         'while application uninstall is running',
       );
+    });
+
+    it('hard-deletes metadata and workspace data while holding the lock', async () => {
+      lock.tryWithLock.mockImplementation(async (_name, run) => ({
+        acquired: true,
+        value: await run(),
+      }));
+
+      await expect(service.deleteWorkspace(workspaceId)).resolves.toEqual(
+        workspace,
+      );
+
+      expect(queryRunner.startTransaction).toHaveBeenCalled();
+      expect(queryRunner.commitTransaction).toHaveBeenCalled();
+      expect(queryRunner.release).toHaveBeenCalled();
+      expect(workspaceSchema.deleteWorkspaceDBSchema).toHaveBeenCalledWith(
+        workspaceId,
+      );
+      expect(workspaceRepository.delete).toHaveBeenCalledWith(workspaceId);
+      expect(cache.invalidate).toHaveBeenCalledWith(
+        'workspaceEntity',
+        workspaceId,
+      );
+      expect(queue.add).toHaveBeenCalledTimes(2);
     });
   });
 });

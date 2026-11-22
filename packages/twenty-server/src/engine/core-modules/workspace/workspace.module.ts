@@ -29,6 +29,7 @@ import { CoreEntityCacheModule } from 'src/engine/core-entity-cache/core-entity-
 import { WorkspaceEntityCacheProviderService } from 'src/engine/core-modules/workspace/services/workspace-entity-cache-provider.service';
 import { WorkspaceDomainService } from 'src/engine/core-modules/workspace/services/workspace-domain.service';
 import { WorkspaceActivationService } from 'src/engine/core-modules/workspace/services/workspace-activation.service';
+import { WorkspaceDeletionService } from 'src/engine/core-modules/workspace/services/workspace-deletion.service';
 import { WorkspaceService } from 'src/engine/core-modules/workspace/services/workspace.service';
 import { WorkspaceGaugeService } from 'src/engine/core-modules/workspace/workspace-gauge.service';
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
@@ -92,6 +93,7 @@ import { StandardObjectsPrefillModule } from 'src/engine/workspace-manager/stand
     WorkspaceService,
     WorkspaceDomainService,
     WorkspaceActivationService,
+    WorkspaceDeletionService,
     WorkspaceGaugeService,
     WorkspaceEntityCacheProviderService,
     BillingDisabledGuard,
