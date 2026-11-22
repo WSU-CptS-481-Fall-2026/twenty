@@ -19,6 +19,7 @@ import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user
 import { type AuthContextUser } from 'src/engine/core-modules/auth/types/auth-context.type';
 import { WorkspaceService } from 'src/engine/core-modules/workspace/services/workspace.service';
 import { WorkspaceDomainService } from 'src/engine/core-modules/workspace/services/workspace-domain.service';
+import { WorkspaceActivationService } from 'src/engine/core-modules/workspace/services/workspace-activation.service';
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 import { PermissionsService } from 'src/engine/metadata-modules/permissions/permissions.service';
 import { WorkspaceManagerService } from 'src/engine/workspace-manager/workspace-manager.service';
@@ -69,6 +70,7 @@ describe('WorkspaceService', () => {
       providers: [
         WorkspaceService,
         WorkspaceDomainService,
+        WorkspaceActivationService,
         {
           provide: getRepositoryToken(WorkspaceEntity),
           useValue: workspaceRepository,
