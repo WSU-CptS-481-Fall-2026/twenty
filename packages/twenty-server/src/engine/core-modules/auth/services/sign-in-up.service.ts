@@ -214,6 +214,36 @@ export class SignInUpService {
       );
     }
 
+    const { workspace, email } = await this.validateSignupInvitation(params);
+
+    const updatedUser = await this.signInUpOnExistingWorkspace({
+      workspace,
+      userData: params.userData,
+      roleId: params.invitation.context?.roleId,
+    });
+
+    if (
+      params.invitation.type === AppTokenType.OnboardingInvitationToken &&
+      params.userData.type === 'newUserWithPicture'
+    ) {
+      await this.grantInvitationReward(workspace.id, updatedUser.id);
+    }
+
+    await this.workspaceInvitationService.invalidateWorkspaceInvitation(
+      workspace.id,
+      email,
+    );
+
+    await this.userService.markEmailAsVerified(updatedUser.id);
+
+    return updatedUser;
+  }
+
+  private async validateSignupInvitation(
+    params: {
+      invitation: AppTokenEntity;
+    } & ExistingUserOrPartialUserWithPicture,
+  ) {
     const email =
       params.userData.type === 'newUserWithPicture'
         ? params.userData.newUserWithPicture.email
@@ -242,42 +272,26 @@ export class SignInUpService {
       );
     }
 
-    const updatedUser = await this.signInUpOnExistingWorkspace({
-      workspace: invitationValidation.workspace,
-      userData: params.userData,
-      roleId: params.invitation.context?.roleId,
-    });
+    return { workspace: invitationValidation.workspace, email };
+  }
 
-    if (
-      params.invitation.type === AppTokenType.OnboardingInvitationToken &&
-      params.userData.type === 'newUserWithPicture'
-    ) {
-      try {
-        await this.billingCreditService.grantCredits({
-          workspaceId: invitationValidation.workspace.id,
-          amountMicro: this.twentyConfigService.get(
-            'ONBOARDING_INVITE_TEAM_CREDITS_REWARD_PER_USER',
-          ),
-          type: BillingCreditGrantType.ONBOARDING_REWARD,
-          reason: 'Onboarding reward: invited teammate signed up',
-          idempotencyKey: `onboarding-invite-team:${invitationValidation.workspace.id}:${updatedUser.id}`,
-        });
-      } catch (error) {
-        this.logger.error(
-          `Failed to credit onboarding invite reward for workspace ${invitationValidation.workspace.id}`,
-          error,
-        );
-      }
+  private async grantInvitationReward(workspaceId: string, userId: string) {
+    try {
+      await this.billingCreditService.grantCredits({
+        workspaceId,
+        amountMicro: this.twentyConfigService.get(
+          'ONBOARDING_INVITE_TEAM_CREDITS_REWARD_PER_USER',
+        ),
+        type: BillingCreditGrantType.ONBOARDING_REWARD,
+        reason: 'Onboarding reward: invited teammate signed up',
+        idempotencyKey: `onboarding-invite-team:${workspaceId}:${userId}`,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to credit onboarding invite reward for workspace ${workspaceId}`,
+        error,
+      );
     }
-
-    await this.workspaceInvitationService.invalidateWorkspaceInvitation(
-      invitationValidation.workspace.id,
-      email,
-    );
-
-    await this.userService.markEmailAsVerified(updatedUser.id);
-
-    return updatedUser;
   }
 
   private async throwIfWorkspaceIsNotReadyForSignInUp(
