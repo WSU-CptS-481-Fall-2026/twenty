@@ -392,9 +392,6 @@ export class AuthService {
       new AuthException('User not found', AuthExceptionCode.USER_NOT_FOUND),
     );
 
-    // passwordHash is hidden for security reasons
-    user.passwordHash = '';
-
     const accessToken = await this.accessTokenService.generateAccessToken({
       userId: user.id,
       workspaceId,
@@ -512,12 +509,12 @@ export class AuthService {
       reason: UserSessionRevokedReason.PasswordChanged,
     });
 
-    this.sendPasswordUpdateNotifyEmail(user, curWorkSpace);
+    await this.sendPasswordUpdateNotifyEmail(user, curWorkSpace.locale);
 
     return { success: true };
   }
 
-  async sendPasswordUpdateNotifyEmail(
+  private async sendPasswordUpdateNotifyEmail(
     user: UserEntity,
     locale: UserWorkspaceEntity['locale'],
   ): Promise<void> {
@@ -783,7 +780,7 @@ export class AuthService {
     const existingUser =
       await this.userService.findUserByEmailWithWorkspaces(email);
 
-      //can use multiple times now! yay!
+      
       const newUserPayload: SignInUpNewUserPayload = {
         firstName,
         lastName,
