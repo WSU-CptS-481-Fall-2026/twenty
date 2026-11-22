@@ -212,6 +212,17 @@ export class ResetPasswordService {
       pathname: resetPasswordPath,
     });
 
+    await this.sendPasswordEmail(workspace.locale);
+
+    return { success: true };
+  }
+
+  private async sendPasswordEmail(
+    locale: UserWorkspaceEntity['locale'],
+    hasPassword: boolean,
+    resetToken: PasswordResetToken
+  ): Promise<void> {
+
     const emailData = {
       link: link.toString(),
       duration: ms(
@@ -247,8 +258,6 @@ export class ResetPasswordService {
       text,
       html,
     });
-
-    return { success: true };
   }
 
   async validatePasswordResetToken(
