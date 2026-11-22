@@ -40,6 +40,7 @@ import {
 import { MAX_WORKSPACES_WITHOUT_ENTERPRISE_KEY } from 'src/engine/core-modules/auth/constants/max-workspaces-without-enterprise-key.constants';
 import { getSignUpWithoutWorkspaceDecision } from 'src/engine/core-modules/auth/utils/get-sign-up-without-workspace-decision.util';
 import { hasProvisionedSignUpDestination } from 'src/engine/core-modules/auth/utils/has-provisioned-sign-up-destination.util';
+import { SignupOnboardingInitializationService } from 'src/engine/core-modules/auth/services/signup-onboarding-initialization.service';
 import { DEFAULT_DPA_REGION } from 'src/engine/core-modules/dpa/config/dpa-region-config.constant';
 import { DpaAgreementEntity } from 'src/engine/core-modules/dpa/entities/dpa-agreement.entity';
 import { DpaAgreementType } from 'src/engine/core-modules/dpa/enums/dpa-agreement-type.enum';
@@ -88,6 +89,7 @@ export class SignInUpService {
     private readonly workspaceInvitationService: WorkspaceInvitationService,
     private readonly userWorkspaceService: UserWorkspaceService,
     private readonly onboardingService: OnboardingService,
+    private readonly signupOnboardingInitializationService: SignupOnboardingInitializationService,
     private readonly workspaceEventEmitter: WorkspaceEventEmitter,
     private readonly twentyConfigService: TwentyConfigService,
     private readonly subdomainManagerService: SubdomainManagerService,
@@ -337,12 +339,14 @@ export class SignInUpService {
         canImpersonate: false,
       });
 
-      await this.activateOnboardingForUser({
-        user,
-        workspace: params.workspace,
-        shouldShowConnectAccountStep: true,
-        shouldShowInstallAppsStep: false,
-      });
+      await this.signupOnboardingInitializationService.activateOnboardingForUser(
+        {
+          user,
+          workspace: params.workspace,
+          shouldShowConnectAccountStep: true,
+          shouldShowInstallAppsStep: false,
+        },
+      );
 
       await this.userWorkspaceService.addUserToWorkspaceIfUserNotInWorkspace(
         user,
@@ -367,52 +371,6 @@ export class SignInUpService {
     );
 
     return user;
-  }
-
-  private async activateOnboardingForUser(
-    {
-      user,
-      workspace,
-      shouldShowConnectAccountStep,
-      shouldShowInstallAppsStep,
-    }: {
-      user: Pick<UserEntity, 'id' | 'firstName' | 'lastName'>;
-      workspace: WorkspaceEntity;
-      shouldShowConnectAccountStep: boolean;
-      shouldShowInstallAppsStep: boolean;
-    },
-    queryRunner?: QueryRunner,
-  ) {
-    if (shouldShowConnectAccountStep) {
-      await this.onboardingService.setOnboardingConnectAccountPending(
-        {
-          userId: user.id,
-          workspaceId: workspace.id,
-          value: true,
-        },
-        queryRunner,
-      );
-    }
-
-    await this.onboardingService.setOnboardingCreateProfilePending(
-      {
-        userId: user.id,
-        workspaceId: workspace.id,
-        value: true,
-      },
-      queryRunner,
-    );
-
-    if (shouldShowInstallAppsStep) {
-      await this.onboardingService.setOnboardingInstallAppsPending(
-        {
-          userId: user.id,
-          workspaceId: workspace.id,
-          value: true,
-        },
-        queryRunner,
-      );
-    }
   }
 
   private async saveNewUser(
@@ -855,7 +813,7 @@ export class SignInUpService {
             queryRunner,
           );
 
-          await this.activateOnboardingForUser(
+          await this.signupOnboardingInitializationService.activateOnboardingForUser(
             {
               user,
               workspace,
