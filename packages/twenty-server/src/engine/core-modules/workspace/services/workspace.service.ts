@@ -35,8 +35,6 @@ import { type AuthContextUser } from 'src/engine/core-modules/auth/types/auth-co
 import { BillingSubscriptionService } from 'src/engine/core-modules/billing/services/billing-subscription.service';
 import { BillingService } from 'src/engine/core-modules/billing/services/billing.service';
 import { DnsManagerService } from 'src/engine/core-modules/dns-manager/services/dns-manager.service';
-import { CustomDomainManagerService } from 'src/engine/core-modules/domain/custom-domain-manager/services/custom-domain-manager.service';
-import { SubdomainManagerService } from 'src/engine/core-modules/domain/subdomain-manager/services/subdomain-manager.service';
 import { EmailingDomainEntity } from 'src/engine/core-modules/emailing-domain/emailing-domain.entity';
 import {
   EmailingDomainWorkspaceCleanupJob,
@@ -61,6 +59,7 @@ import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user
 import { UserWorkspaceService } from 'src/engine/core-modules/user-workspace/user-workspace.service';
 import { UserEntity } from 'src/engine/core-modules/user/user.entity';
 import { WORKSPACE_FIELDS_UPDATABLE_BEFORE_ACTIVATION } from 'src/engine/core-modules/workspace/constants/workspace-fields-updatable-before-activation.constant';
+import { WorkspaceDomainService } from 'src/engine/core-modules/workspace/services/workspace-domain.service';
 import {
   WorkspaceDeletionApplicationUninstallJob,
   type WorkspaceDeletionApplicationUninstallJobData,
@@ -167,9 +166,8 @@ export class WorkspaceService {
     private readonly preInstalledAppsService: PreInstalledAppsService,
     private readonly workspaceMigrationValidateBuildAndRunService: WorkspaceMigrationValidateBuildAndRunService,
     private readonly workspaceCacheStorageService: WorkspaceCacheStorageService,
-    private readonly subdomainManagerService: SubdomainManagerService,
+    private readonly workspaceDomainService: WorkspaceDomainService,
     private readonly workspaceSchemaService: WorkspaceSchemaService,
-    private readonly customDomainManagerService: CustomDomainManagerService,
     private readonly fileCorePictureService: FileCorePictureService,
     private readonly aiModelRegistryService: AiModelRegistryService,
     @InjectMessageQueue(MessageQueue.deleteCascadeQueue)
@@ -312,34 +310,11 @@ export class WorkspaceService {
       workspaceActivationStatus: workspace.activationStatus,
     });
 
-    if (
-      isDefined(payload.subdomain) &&
-      workspace.subdomain !== payload.subdomain
-    ) {
-      await this.subdomainManagerService.validateSubdomainOrThrow(
-        payload.subdomain,
-      );
-    }
-
-    let customDomainRegistered = false;
-
-    if (payload.customDomain === null && isDefined(workspace.customDomain)) {
-      await this.dnsManagerService.deleteHostnameSilently(
-        workspace.customDomain,
-      );
-      workspace.isCustomDomainEnabled = false;
-    }
-
-    if (
-      payload.customDomain &&
-      workspace.customDomain !== payload.customDomain
-    ) {
-      await this.customDomainManagerService.setCustomDomain(
+    const customDomainRegistered =
+      await this.workspaceDomainService.prepareWorkspaceUpdate(
         workspace,
-        payload.customDomain,
+        payload,
       );
-      customDomainRegistered = true;
-    }
 
     this.validateAuthProviders(payload);
 
@@ -360,11 +335,9 @@ export class WorkspaceService {
       });
     } catch (error) {
       if (payload.customDomain && customDomainRegistered) {
-        this.dnsManagerService
-          .deleteHostnameSilently(payload.customDomain)
-          .catch((err) => {
-            this.exceptionHandlerService.captureExceptions([err]);
-          });
+        this.workspaceDomainService.discardRegisteredCustomDomain(
+          payload.customDomain,
+        );
       }
       throw error;
     }
