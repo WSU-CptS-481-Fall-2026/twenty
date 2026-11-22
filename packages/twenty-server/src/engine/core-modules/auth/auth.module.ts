@@ -29,6 +29,7 @@ import { ResetPasswordService } from 'src/engine/core-modules/auth/services/rese
 import { SignInUpService } from 'src/engine/core-modules/auth/services/sign-in-up.service';
 import { SignupOnboardingInitializationService } from 'src/engine/core-modules/auth/services/signup-onboarding-initialization.service';
 import { SignupPolicyService } from 'src/engine/core-modules/auth/services/signup-policy.service';
+import { SignupWorkspaceCreationService } from 'src/engine/core-modules/auth/services/signup-workspace-creation.service';
 import { SignupWorkspaceLogoService } from 'src/engine/core-modules/auth/services/signup-workspace-logo.service';
 import { UpdateConnectedAccountOnReconnectService } from 'src/engine/core-modules/auth/services/update-connected-account-on-reconnect.service';
 import { SamlAuthStrategy } from 'src/engine/core-modules/auth/strategies/saml.auth.strategy';
@@ -153,6 +154,7 @@ import { JwtAuthStrategy } from './strategies/jwt.auth.strategy';
     SignInUpService,
     SignupOnboardingInitializationService,
     SignupPolicyService,
+    SignupWorkspaceCreationService,
     SignupWorkspaceLogoService,
     AuthService,
     JwtAuthStrategy,

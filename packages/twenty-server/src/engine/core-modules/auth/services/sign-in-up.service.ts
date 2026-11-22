@@ -22,7 +22,6 @@ import {
   type AppTokenEntity,
   AppTokenType,
 } from 'src/engine/core-modules/app-token/app-token.entity';
-import { ApplicationService } from 'src/engine/core-modules/application/application.service';
 import { BillingCreditGrantType } from 'src/engine/core-modules/billing/enums/billing-credit-grant-type.enum';
 import { BillingCreditService } from 'src/engine/core-modules/billing/services/billing-credit.service';
 import { BillingService } from 'src/engine/core-modules/billing/services/billing.service';
@@ -37,11 +36,8 @@ import {
 } from 'src/engine/core-modules/auth/auth.util';
 import { SignupOnboardingInitializationService } from 'src/engine/core-modules/auth/services/signup-onboarding-initialization.service';
 import { SignupPolicyService } from 'src/engine/core-modules/auth/services/signup-policy.service';
+import { SignupWorkspaceCreationService } from 'src/engine/core-modules/auth/services/signup-workspace-creation.service';
 import { SignupWorkspaceLogoService } from 'src/engine/core-modules/auth/services/signup-workspace-logo.service';
-import { DEFAULT_DPA_REGION } from 'src/engine/core-modules/dpa/config/dpa-region-config.constant';
-import { DpaAgreementEntity } from 'src/engine/core-modules/dpa/entities/dpa-agreement.entity';
-import { DpaAgreementType } from 'src/engine/core-modules/dpa/enums/dpa-agreement-type.enum';
-import { buildDpaAgreementRecord } from 'src/engine/core-modules/dpa/utils/build-dpa-agreement-record.util';
 import {
   type AuthProviderWithPasswordType,
   type ExistingUserOrPartialUserWithPicture,
@@ -77,13 +73,12 @@ export class SignInUpService {
   constructor(
     @InjectRepository(UserEntity)
     private readonly userRepository: Repository<UserEntity>,
-    @InjectRepository(WorkspaceEntity)
-    private readonly workspaceRepository: Repository<WorkspaceEntity>,
     private readonly workspaceInvitationService: WorkspaceInvitationService,
     private readonly userWorkspaceService: UserWorkspaceService,
     private readonly onboardingService: OnboardingService,
     private readonly signupOnboardingInitializationService: SignupOnboardingInitializationService,
     private readonly signupPolicyService: SignupPolicyService,
+    private readonly signupWorkspaceCreationService: SignupWorkspaceCreationService,
     private readonly signupWorkspaceLogoService: SignupWorkspaceLogoService,
     private readonly workspaceEventEmitter: WorkspaceEventEmitter,
     private readonly twentyConfigService: TwentyConfigService,
@@ -91,7 +86,6 @@ export class SignInUpService {
     private readonly userService: UserService,
     private readonly metricsService: MetricsService,
     private readonly workspaceCacheService: WorkspaceCacheService,
-    private readonly applicationService: ApplicationService,
     private readonly eventLogEmitterService: EventLogEmitterService,
     private readonly billingCreditService: BillingCreditService,
     private readonly billingService: BillingService,
@@ -433,74 +427,6 @@ export class SignInUpService {
     return savedUser;
   }
 
-  private async createSignupWorkspace({
-    workspaceId,
-    workspaceCustomApplicationId,
-    requestedSubdomain,
-    displayName,
-    email,
-    isWorkEmailFound,
-    queryRunner,
-  }: {
-    workspaceId: string;
-    workspaceCustomApplicationId: string;
-    requestedSubdomain: string | undefined;
-    displayName: string;
-    email: string;
-    isWorkEmailFound: boolean;
-    queryRunner: QueryRunner;
-  }) {
-    const workspaceToCreate = this.workspaceRepository.create({
-      id: workspaceId,
-      subdomain: isDefined(requestedSubdomain)
-        ? requestedSubdomain
-        : await this.subdomainManagerService.generateSubdomain(
-            isWorkEmailFound ? { userEmail: email } : {},
-          ),
-      workspaceCustomApplicationId,
-      displayName,
-      inviteHash: v4(),
-      activationStatus: WorkspaceActivationStatus.PENDING_CREATION,
-    });
-
-    return queryRunner.manager.save(WorkspaceEntity, workspaceToCreate);
-  }
-
-  private async recordSignupDpa({
-    workspaceId,
-    userId,
-    email,
-    queryRunner,
-  }: {
-    workspaceId: string;
-    userId: string;
-    email: string;
-    queryRunner: QueryRunner;
-  }): Promise<void> {
-    // Click-through DPA: the DPA is incorporated by reference into the
-    // ToS/signup, so acceptance = execution. Only relevant on Twenty's
-    // managed cloud (multi-workspace), where Twenty is the Processor
-    // hosting the data; on self-hosted deployments Twenty is not the
-    // Processor, so there is nothing to record. Done atomically with
-    // workspace creation so we can later prove what was agreed. (Billing
-    // is an independent feature flag and must not be used to detect cloud.)
-    if (this.twentyConfigService.get('IS_MULTIWORKSPACE_ENABLED') === true) {
-      await queryRunner.manager.save(
-        DpaAgreementEntity,
-        buildDpaAgreementRecord({
-          workspaceId,
-          type: DpaAgreementType.CLICK_THROUGH,
-          region:
-            this.twentyConfigService.get('DPA_DEPLOYMENT_REGION') ??
-            DEFAULT_DPA_REGION,
-          acceptedAt: new Date(),
-          acceptedByUserId: userId,
-          acceptedByEmail: email,
-        }),
-      );
-    }
-  }
-
   async signUpOnNewWorkspace(
     userData: ExistingUserOrPartialUserWithPicture['userData'],
     options?: { displayName?: string; subdomain?: string },
@@ -555,24 +481,16 @@ export class SignInUpService {
         await this.dataSource.transaction(async (entityManager) => {
           const queryRunner = entityManager.queryRunner as QueryRunner;
 
-          const workspace = await this.createSignupWorkspace({
-            workspaceId,
-            workspaceCustomApplicationId,
-            requestedSubdomain,
-            displayName,
-            email,
-            isWorkEmailFound,
-            queryRunner,
-          });
-
-          const customApplication =
-            await this.applicationService.createWorkspaceCustomApplication(
-              {
-                workspaceId,
-                applicationId: workspaceCustomApplicationId,
-              },
+          const { workspace, customApplication } =
+            await this.signupWorkspaceCreationService.createSignupWorkspace({
+              workspaceId,
+              workspaceCustomApplicationId,
+              requestedSubdomain,
+              displayName,
+              email,
+              isWorkEmailFound,
               queryRunner,
-            );
+            });
 
           const isExistingUser = userData.type === 'existingUser';
           const user = isExistingUser
@@ -619,7 +537,7 @@ export class SignInUpService {
             queryRunner,
           );
 
-          await this.recordSignupDpa({
+          await this.signupWorkspaceCreationService.recordSignupDpa({
             workspaceId: workspace.id,
             userId: user.id,
             email,
