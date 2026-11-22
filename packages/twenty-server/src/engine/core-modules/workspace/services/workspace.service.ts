@@ -238,6 +238,57 @@ export class WorkspaceService {
     }
   }
 
+  private validateAuthProviders(payload: Partial<WorkspaceEntity>): void {
+    const authProvidersBySystem = {
+      google: this.twentyConfigService.get('AUTH_GOOGLE_ENABLED'),
+      password: this.twentyConfigService.get('AUTH_PASSWORD_ENABLED'),
+      microsoft: this.twentyConfigService.get('AUTH_MICROSOFT_ENABLED'),
+    };
+
+    if (payload.isGoogleAuthEnabled && !authProvidersBySystem.google) {
+      throw new WorkspaceException(
+        'Google auth is not enabled in the system.',
+        WorkspaceExceptionCode.ENVIRONMENT_VAR_NOT_ENABLED,
+      );
+    }
+    if (payload.isMicrosoftAuthEnabled && !authProvidersBySystem.microsoft) {
+      throw new WorkspaceException(
+        'Microsoft auth is not enabled in the system.',
+        WorkspaceExceptionCode.ENVIRONMENT_VAR_NOT_ENABLED,
+      );
+    }
+    if (payload.isPasswordAuthEnabled && !authProvidersBySystem.password) {
+      throw new WorkspaceException(
+        'Password auth is not enabled in the system.',
+        WorkspaceExceptionCode.ENVIRONMENT_VAR_NOT_ENABLED,
+      );
+    }
+    if (payload.isGoogleAuthBypassEnabled && !authProvidersBySystem.google) {
+      throw new WorkspaceException(
+        'Google auth is not enabled in the system.',
+        WorkspaceExceptionCode.ENVIRONMENT_VAR_NOT_ENABLED,
+      );
+    }
+    if (
+      payload.isMicrosoftAuthBypassEnabled &&
+      !authProvidersBySystem.microsoft
+    ) {
+      throw new WorkspaceException(
+        'Microsoft auth is not enabled in the system.',
+        WorkspaceExceptionCode.ENVIRONMENT_VAR_NOT_ENABLED,
+      );
+    }
+    if (
+      payload.isPasswordAuthBypassEnabled &&
+      !authProvidersBySystem.password
+    ) {
+      throw new WorkspaceException(
+        'Password auth is not enabled in the system.',
+        WorkspaceExceptionCode.ENVIRONMENT_VAR_NOT_ENABLED,
+      );
+    }
+  }
+
   async updateWorkspaceById({
     payload,
     userWorkspaceId,
@@ -290,54 +341,7 @@ export class WorkspaceService {
       customDomainRegistered = true;
     }
 
-    const authProvidersBySystem = {
-      google: this.twentyConfigService.get('AUTH_GOOGLE_ENABLED'),
-      password: this.twentyConfigService.get('AUTH_PASSWORD_ENABLED'),
-      microsoft: this.twentyConfigService.get('AUTH_MICROSOFT_ENABLED'),
-    };
-
-    if (payload.isGoogleAuthEnabled && !authProvidersBySystem.google) {
-      throw new WorkspaceException(
-        'Google auth is not enabled in the system.',
-        WorkspaceExceptionCode.ENVIRONMENT_VAR_NOT_ENABLED,
-      );
-    }
-    if (payload.isMicrosoftAuthEnabled && !authProvidersBySystem.microsoft) {
-      throw new WorkspaceException(
-        'Microsoft auth is not enabled in the system.',
-        WorkspaceExceptionCode.ENVIRONMENT_VAR_NOT_ENABLED,
-      );
-    }
-    if (payload.isPasswordAuthEnabled && !authProvidersBySystem.password) {
-      throw new WorkspaceException(
-        'Password auth is not enabled in the system.',
-        WorkspaceExceptionCode.ENVIRONMENT_VAR_NOT_ENABLED,
-      );
-    }
-    if (payload.isGoogleAuthBypassEnabled && !authProvidersBySystem.google) {
-      throw new WorkspaceException(
-        'Google auth is not enabled in the system.',
-        WorkspaceExceptionCode.ENVIRONMENT_VAR_NOT_ENABLED,
-      );
-    }
-    if (
-      payload.isMicrosoftAuthBypassEnabled &&
-      !authProvidersBySystem.microsoft
-    ) {
-      throw new WorkspaceException(
-        'Microsoft auth is not enabled in the system.',
-        WorkspaceExceptionCode.ENVIRONMENT_VAR_NOT_ENABLED,
-      );
-    }
-    if (
-      payload.isPasswordAuthBypassEnabled &&
-      !authProvidersBySystem.password
-    ) {
-      throw new WorkspaceException(
-        'Password auth is not enabled in the system.',
-        WorkspaceExceptionCode.ENVIRONMENT_VAR_NOT_ENABLED,
-      );
-    }
+    this.validateAuthProviders(payload);
 
     if (isDefined(payload.aiModelIdByTier)) {
       this.validateAiModelIdByTier({
