@@ -2,14 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 
 import { isNumber } from '@sniptt/guards';
-import { assertUnreachable, isDefined } from 'twenty-shared/utils';
+import { isDefined } from 'twenty-shared/utils';
 import { WorkspaceActivationStatus } from 'twenty-shared/workspace';
 import { type DataSource, type QueryRunner, Repository } from 'typeorm';
 
-import { BillingCreditGrantType } from 'src/engine/core-modules/billing/enums/billing-credit-grant-type.enum';
-import { BillingCreditService } from 'src/engine/core-modules/billing/services/billing-credit.service';
 import { BillingService } from 'src/engine/core-modules/billing/services/billing.service';
-import { ExceptionHandlerService } from 'src/engine/core-modules/exception-handler/exception-handler.service';
 import { InjectMessageQueue } from 'src/engine/core-modules/message-queue/decorators/message-queue.decorator';
 import { MessageQueue } from 'src/engine/core-modules/message-queue/message-queue.constants';
 import { MessageQueueService } from 'src/engine/core-modules/message-queue/services/message-queue.service';
@@ -25,33 +22,23 @@ import {
   OnboardingException,
   OnboardingExceptionCode,
 } from 'src/engine/core-modules/onboarding/onboarding.exception';
+import { OnboardingHistoryService } from 'src/engine/core-modules/onboarding/services/onboarding-history.service';
+import { OnboardingRewardService } from 'src/engine/core-modules/onboarding/services/onboarding-reward.service';
+import { type OnboardingContext } from 'src/engine/core-modules/onboarding/types/onboarding-context.type';
+import {
+  type OnboardingKeyValueTypeMap,
+  OnboardingStepKeys,
+} from 'src/engine/core-modules/onboarding/types/onboarding-key-value.type';
 import { type ReversibleOnboardingStep } from 'src/engine/core-modules/onboarding/types/reversible-onboarding-step.type';
-import { getOnboardingEnrichmentCreditRewardMicro } from 'src/engine/core-modules/onboarding/utils/get-onboarding-enrichment-credit-reward-micro.util';
 import { readBookCallStepMinEmployeeCount } from 'src/engine/core-modules/onboarding/utils/read-book-call-step-min-employee-count.util';
 import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
 import { UserVarsService } from 'src/engine/core-modules/user/user-vars/services/user-vars.service';
-import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
 import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 
-export enum OnboardingStepKeys {
-  ONBOARDING_CONNECT_ACCOUNT_PENDING = 'ONBOARDING_CONNECT_ACCOUNT_PENDING',
-  ONBOARDING_INVITE_TEAM_PENDING = 'ONBOARDING_INVITE_TEAM_PENDING',
-  ONBOARDING_CREATE_PROFILE_PENDING = 'ONBOARDING_CREATE_PROFILE_PENDING',
-  ONBOARDING_INSTALL_APPS_PENDING = 'ONBOARDING_INSTALL_APPS_PENDING',
-  ONBOARDING_BOOK_CALL_PENDING = 'ONBOARDING_BOOK_CALL_PENDING',
-  ONBOARDING_BOOK_CALL_OFFERED = 'ONBOARDING_BOOK_CALL_OFFERED',
-  ONBOARDING_REVERSIBLE_STEP_HISTORY = 'ONBOARDING_REVERSIBLE_STEP_HISTORY',
-}
-
-export type OnboardingKeyValueTypeMap = {
-  [OnboardingStepKeys.ONBOARDING_CONNECT_ACCOUNT_PENDING]: boolean;
-  [OnboardingStepKeys.ONBOARDING_INVITE_TEAM_PENDING]: boolean;
-  [OnboardingStepKeys.ONBOARDING_CREATE_PROFILE_PENDING]: boolean;
-  [OnboardingStepKeys.ONBOARDING_INSTALL_APPS_PENDING]: boolean;
-  [OnboardingStepKeys.ONBOARDING_BOOK_CALL_PENDING]: boolean;
-  [OnboardingStepKeys.ONBOARDING_BOOK_CALL_OFFERED]: boolean;
-  [OnboardingStepKeys.ONBOARDING_REVERSIBLE_STEP_HISTORY]: ReversibleOnboardingStep[];
-};
+export {
+  type OnboardingKeyValueTypeMap,
+  OnboardingStepKeys,
+} from 'src/engine/core-modules/onboarding/types/onboarding-key-value.type';
 
 @Injectable()
 export class OnboardingService {
@@ -59,30 +46,22 @@ export class OnboardingService {
 
   constructor(
     private readonly billingService: BillingService,
-    private readonly billingCreditService: BillingCreditService,
-    private readonly exceptionHandlerService: ExceptionHandlerService,
+    private readonly onboardingHistoryService: OnboardingHistoryService,
+    private readonly onboardingRewardService: OnboardingRewardService,
     private readonly userVarsService: UserVarsService<OnboardingKeyValueTypeMap>,
     private readonly twentyConfigService: TwentyConfigService,
     @InjectRepository(WorkspaceEntity)
     private readonly workspaceRepository: Repository<WorkspaceEntity>,
-    @InjectRepository(UserWorkspaceEntity)
-    private readonly userWorkspaceRepository: Repository<UserWorkspaceEntity>,
     @InjectMessageQueue(MessageQueue.workspaceQueue)
     private readonly messageQueueService: MessageQueueService,
     @InjectDataSource()
     private readonly dataSource: DataSource,
   ) {}
 
-  private async runStepTransitionInLockedTransaction<T>(
-    {
-      userId,
-      workspaceId,
-    }: {
-      userId: string;
-      workspaceId: string;
-    },
-    runStepTransition: (queryRunner: QueryRunner) => Promise<T>,
-  ): Promise<T> {
+  private async runStepTransitionInLockedTransaction<TResult>(
+    { userId, workspaceId }: OnboardingContext,
+    runStepTransition: (queryRunner: QueryRunner) => Promise<TResult>,
+  ): Promise<TResult> {
     return this.dataSource.transaction(async (entityManager) => {
       const transactionQueryRunner = entityManager.queryRunner;
 
@@ -113,10 +92,7 @@ export class OnboardingService {
   async getOnboardingStatus({
     userId,
     workspaceId,
-  }: {
-    userId: string;
-    workspaceId: string;
-  }): Promise<OnboardingStatus | null> {
+  }: OnboardingContext): Promise<OnboardingStatus | null> {
     // We always read the workspace directly from the database here (bypassing
     // the per-instance core entity cache) so that onboardingStatus reflects the
     // freshest activationStatus right after activateWorkspace, even when a
@@ -138,37 +114,10 @@ export class OnboardingService {
       workspaceId: workspace.id,
     });
 
-    const isProfileCreationPending =
-      userVars.get(OnboardingStepKeys.ONBOARDING_CREATE_PROFILE_PENDING) ===
-      true;
+    const pendingStatus = this.getPendingOnboardingStatus(userVars);
 
-    const isConnectAccountPending =
-      userVars.get(OnboardingStepKeys.ONBOARDING_CONNECT_ACCOUNT_PENDING) ===
-      true;
-
-    const isInstallAppsPending =
-      userVars.get(OnboardingStepKeys.ONBOARDING_INSTALL_APPS_PENDING) === true;
-
-    const isInviteTeamPending =
-      userVars.get(OnboardingStepKeys.ONBOARDING_INVITE_TEAM_PENDING) === true;
-
-    const isBookCallPending =
-      userVars.get(OnboardingStepKeys.ONBOARDING_BOOK_CALL_PENDING) === true;
-
-    if (isConnectAccountPending) {
-      return OnboardingStatus.SYNC_EMAIL;
-    }
-
-    if (isInstallAppsPending) {
-      return OnboardingStatus.APPS_INSTALLATION;
-    }
-
-    if (isProfileCreationPending) {
-      return OnboardingStatus.PROFILE_CREATION;
-    }
-
-    if (isInviteTeamPending) {
-      return OnboardingStatus.INVITE_TEAM;
+    if (isDefined(pendingStatus)) {
+      return pendingStatus;
     }
 
     const isPlanRequired =
@@ -177,7 +126,7 @@ export class OnboardingService {
       );
 
     if (
-      isBookCallPending &&
+      userVars.get(OnboardingStepKeys.ONBOARDING_BOOK_CALL_PENDING) === true &&
       isPlanRequired &&
       isDefined(readBookCallStepMinEmployeeCount(this.twentyConfigService))
     ) {
@@ -189,6 +138,37 @@ export class OnboardingService {
     }
 
     return OnboardingStatus.COMPLETED;
+  }
+
+  private getPendingOnboardingStatus(
+    userVars: Map<OnboardingStepKeys, unknown>,
+  ): OnboardingStatus | null {
+    const pendingSteps = [
+      [
+        OnboardingStepKeys.ONBOARDING_CONNECT_ACCOUNT_PENDING,
+        OnboardingStatus.SYNC_EMAIL,
+      ],
+      [
+        OnboardingStepKeys.ONBOARDING_INSTALL_APPS_PENDING,
+        OnboardingStatus.APPS_INSTALLATION,
+      ],
+      [
+        OnboardingStepKeys.ONBOARDING_CREATE_PROFILE_PENDING,
+        OnboardingStatus.PROFILE_CREATION,
+      ],
+      [
+        OnboardingStepKeys.ONBOARDING_INVITE_TEAM_PENDING,
+        OnboardingStatus.INVITE_TEAM,
+      ],
+    ] as const;
+
+    for (const [key, status] of pendingSteps) {
+      if (userVars.get(key) === true) {
+        return status;
+      }
+    }
+
+    return null;
   }
 
   async isOnboardingInviteTeamPending({
@@ -210,16 +190,11 @@ export class OnboardingService {
   async getPreviousReversibleOnboardingStatus({
     userId,
     workspaceId,
-  }: {
-    userId: string;
-    workspaceId: string;
-  }): Promise<ReversibleOnboardingStep | null> {
-    const reversibleStepHistory = await this.getReversibleOnboardingStepHistory(
-      {
-        userId,
-        workspaceId,
-      },
-    );
+  }: OnboardingContext): Promise<ReversibleOnboardingStep | null> {
+    const reversibleStepHistory = await this.onboardingHistoryService.get({
+      userId,
+      workspaceId,
+    });
 
     return reversibleStepHistory[reversibleStepHistory.length - 1] ?? null;
   }
@@ -227,18 +202,14 @@ export class OnboardingService {
   async goBackToPreviousOnboardingStep({
     userId,
     workspaceId,
-  }: {
-    userId: string;
-    workspaceId: string;
-  }) {
+  }: OnboardingContext) {
     await this.runStepTransitionInLockedTransaction(
       { userId, workspaceId },
       async (queryRunner) => {
-        const reversibleStepHistory =
-          await this.getReversibleOnboardingStepHistory({
-            userId,
-            workspaceId,
-          });
+        const reversibleStepHistory = await this.onboardingHistoryService.get({
+          userId,
+          workspaceId,
+        });
         const previousReversibleStep =
           reversibleStepHistory[reversibleStepHistory.length - 1];
 
@@ -249,12 +220,9 @@ export class OnboardingService {
           );
         }
 
-        await this.setReversibleOnboardingStepHistory(
-          {
-            userId,
-            workspaceId,
-            reversibleStepHistory: reversibleStepHistory.slice(0, -1),
-          },
+        await this.onboardingHistoryService.set(
+          { userId, workspaceId },
+          reversibleStepHistory.slice(0, -1),
           queryRunner,
         );
 
@@ -285,94 +253,6 @@ export class OnboardingService {
     );
   }
 
-  private async pushReversibleOnboardingStep(
-    {
-      userId,
-      workspaceId,
-      step,
-    }: {
-      userId: string;
-      workspaceId: string;
-      step: ReversibleOnboardingStep;
-    },
-    queryRunner?: QueryRunner,
-  ) {
-    const reversibleStepHistory = await this.getReversibleOnboardingStepHistory(
-      {
-        userId,
-        workspaceId,
-      },
-    );
-
-    await this.setReversibleOnboardingStepHistory(
-      {
-        userId,
-        workspaceId,
-        reversibleStepHistory: [...reversibleStepHistory, step],
-      },
-      queryRunner,
-    );
-  }
-
-  private async getReversibleOnboardingStepHistory({
-    userId,
-    workspaceId,
-  }: {
-    userId: string;
-    workspaceId: string;
-  }): Promise<ReversibleOnboardingStep[]> {
-    const reversibleStepHistory = await this.userVarsService.get({
-      userId,
-      workspaceId,
-      key: OnboardingStepKeys.ONBOARDING_REVERSIBLE_STEP_HISTORY,
-    });
-
-    return Array.isArray(reversibleStepHistory) ? reversibleStepHistory : [];
-  }
-
-  private async setReversibleOnboardingStepHistory(
-    {
-      userId,
-      workspaceId,
-      reversibleStepHistory,
-    }: {
-      userId: string;
-      workspaceId: string;
-      reversibleStepHistory: ReversibleOnboardingStep[];
-    },
-    queryRunner?: QueryRunner,
-  ) {
-    await this.userVarsService.set(
-      {
-        userId,
-        workspaceId,
-        key: OnboardingStepKeys.ONBOARDING_REVERSIBLE_STEP_HISTORY,
-        value: reversibleStepHistory,
-      },
-      queryRunner,
-    );
-  }
-
-  private async clearReversibleOnboardingStepHistoryAfterIrreversibleStep(
-    {
-      userId,
-      workspaceId,
-    }: {
-      userId: string;
-      workspaceId: string;
-    },
-    queryRunner?: QueryRunner,
-  ) {
-    await this.setReversibleOnboardingStepHistory(
-      {
-        userId,
-        workspaceId,
-        reversibleStepHistory: [],
-      },
-      queryRunner,
-    );
-  }
-
   private async restoreReversibleOnboardingStepPendingFlag(
     {
       userId,
@@ -385,57 +265,34 @@ export class OnboardingService {
     },
     queryRunner?: QueryRunner,
   ) {
-    switch (step) {
-      case OnboardingStatus.SYNC_EMAIL:
-        return this.setOnboardingConnectAccountPending(
-          {
-            userId,
-            workspaceId,
-            value: true,
-          },
-          queryRunner,
-        );
-      case OnboardingStatus.APPS_INSTALLATION:
-        return this.setOnboardingInstallAppsPending(
-          {
-            userId,
-            workspaceId,
-            value: true,
-          },
-          queryRunner,
-        );
-      case OnboardingStatus.PROFILE_CREATION:
-        return this.setOnboardingCreateProfilePending(
-          {
-            userId,
-            workspaceId,
-            value: true,
-          },
-          queryRunner,
-        );
-      case OnboardingStatus.INVITE_TEAM:
-        // User-scoped on purpose: the workspace-scoped flag would pull every
-        // other member of the workspace back to the invite screen.
-        return this.setOnboardingInviteTeamPending(
-          {
-            userId,
-            workspaceId,
-            value: true,
-          },
-          queryRunner,
-        );
-      case OnboardingStatus.BOOK_CALL:
-        return this.setOnboardingBookCallPending(
-          {
-            userId,
-            workspaceId,
-            value: true,
-          },
-          queryRunner,
-        );
-      default:
-        assertUnreachable(step);
+    const restoreHandlers: Record<
+      ReversibleOnboardingStep,
+      (
+        context: OnboardingContext & { value: boolean },
+        queryRunner?: QueryRunner,
+      ) => Promise<void>
+    > = {
+      [OnboardingStatus.SYNC_EMAIL]:
+        this.setOnboardingConnectAccountPending.bind(this),
+      [OnboardingStatus.APPS_INSTALLATION]:
+        this.setOnboardingInstallAppsPending.bind(this),
+      [OnboardingStatus.PROFILE_CREATION]:
+        this.setOnboardingCreateProfilePending.bind(this),
+      [OnboardingStatus.INVITE_TEAM]:
+        this.setOnboardingInviteTeamPending.bind(this),
+      [OnboardingStatus.BOOK_CALL]:
+        this.setOnboardingBookCallPending.bind(this),
+    };
+
+    if (!Object.prototype.hasOwnProperty.call(restoreHandlers, step)) {
+      throw new Error("Didn't expect to get here.");
     }
+
+    // Invite-team restoration must remain user-scoped.
+    return restoreHandlers[step](
+      { userId, workspaceId, value: true },
+      queryRunner,
+    );
   }
 
   async setOnboardingConnectAccountPending(
@@ -477,16 +334,17 @@ export class OnboardingService {
   async completeOnboardingConnectAccountStep({
     userId,
     workspaceId,
-  }: {
-    userId: string;
-    workspaceId: string;
-  }) {
+  }: OnboardingContext) {
     const hasClaimedConnectAccountStep =
       await this.runStepTransitionInLockedTransaction(
         { userId, workspaceId },
         async (queryRunner) => {
-          const hasClaimedStep = await this.claimOnboardingConnectAccountStep(
-            { userId, workspaceId },
+          const hasClaimedStep = await this.claimOnboardingStep(
+            {
+              userId,
+              workspaceId,
+              key: OnboardingStepKeys.ONBOARDING_CONNECT_ACCOUNT_PENDING,
+            },
             queryRunner,
           );
 
@@ -494,7 +352,7 @@ export class OnboardingService {
             return false;
           }
 
-          await this.clearReversibleOnboardingStepHistoryAfterIrreversibleStep(
+          await this.onboardingHistoryService.clear(
             { userId, workspaceId },
             queryRunner,
           );
@@ -507,7 +365,9 @@ export class OnboardingService {
       return;
     }
 
-    await this.creditImportContactsRewardForFirstWorkspaceUser({ workspaceId });
+    await this.onboardingRewardService.creditImportContactsRewardForFirstWorkspaceUser(
+      { workspaceId },
+    );
   }
 
   async skipOnboardingConnectAccountStep({
@@ -522,91 +382,49 @@ export class OnboardingService {
     await this.runStepTransitionInLockedTransaction(
       { userId, workspaceId },
       async (queryRunner) => {
-        const hasClaimedConnectAccountStep =
-          await this.claimOnboardingConnectAccountStep(
-            { userId, workspaceId },
-            queryRunner,
-          );
+        const hasClaimedConnectAccountStep = await this.claimOnboardingStep(
+          {
+            userId,
+            workspaceId,
+            key: OnboardingStepKeys.ONBOARDING_CONNECT_ACCOUNT_PENDING,
+          },
+          queryRunner,
+        );
 
         if (!hasClaimedConnectAccountStep || isAutoSkipped) {
           return;
         }
 
-        await this.pushReversibleOnboardingStep(
-          {
-            userId,
-            workspaceId,
-            step: OnboardingStatus.SYNC_EMAIL,
-          },
+        await this.onboardingHistoryService.push(
+          { userId, workspaceId },
+          OnboardingStatus.SYNC_EMAIL,
           queryRunner,
         );
       },
     );
   }
 
-  private async isFirstWorkspaceUser({
-    workspaceId,
-  }: {
-    workspaceId: string;
-  }): Promise<boolean> {
-    const workspaceUserCount = await this.userWorkspaceRepository.countBy({
-      workspaceId,
-    });
-
-    return workspaceUserCount === 1;
-  }
-
-  private async claimOnboardingConnectAccountStep(
-    {
-      userId,
-      workspaceId,
-    }: {
-      userId: string;
-      workspaceId: string;
-    },
+  private async claimOnboardingStep(
+    context:
+      | (OnboardingContext & {
+          key:
+            | OnboardingStepKeys.ONBOARDING_CONNECT_ACCOUNT_PENDING
+            | OnboardingStepKeys.ONBOARDING_INSTALL_APPS_PENDING
+            | OnboardingStepKeys.ONBOARDING_CREATE_PROFILE_PENDING
+            | OnboardingStepKeys.ONBOARDING_BOOK_CALL_PENDING;
+        })
+      | {
+          workspaceId: string;
+          key: OnboardingStepKeys.ONBOARDING_INVITE_TEAM_PENDING;
+        },
     queryRunner?: QueryRunner,
   ): Promise<boolean> {
     const affectedRows = await this.userVarsService.delete(
-      {
-        userId,
-        workspaceId,
-        key: OnboardingStepKeys.ONBOARDING_CONNECT_ACCOUNT_PENDING,
-      },
+      context,
       queryRunner,
     );
 
     return isDefined(affectedRows) && affectedRows > 0;
-  }
-
-  private async creditImportContactsRewardForFirstWorkspaceUser({
-    workspaceId,
-  }: {
-    workspaceId: string;
-  }) {
-    try {
-      const isFirstWorkspaceUser = await this.isFirstWorkspaceUser({
-        workspaceId,
-      });
-
-      if (!isFirstWorkspaceUser) {
-        return;
-      }
-
-      await this.billingCreditService.grantCredits({
-        workspaceId,
-        amountMicro: this.twentyConfigService.get(
-          'ONBOARDING_IMPORT_CONTACTS_CREDITS_REWARD',
-        ),
-        type: BillingCreditGrantType.ONBOARDING_REWARD,
-        reason: 'Onboarding reward: import contacts',
-        idempotencyKey: `onboarding-import-contacts:${workspaceId}`,
-      });
-    } catch (error) {
-      this.logger.error(
-        `Failed to credit onboarding import-contacts reward for workspace ${workspaceId}`,
-        error,
-      );
-    }
   }
 
   async setOnboardingInstallAppsPending(
@@ -667,22 +485,22 @@ export class OnboardingService {
       await this.runStepTransitionInLockedTransaction(
         { userId, workspaceId },
         async (queryRunner) => {
-          const hasClaimedInstallAppsStep =
-            await this.claimInstallAppsOnboardingStep(
-              { userId, workspaceId },
-              queryRunner,
-            );
+          const hasClaimedInstallAppsStep = await this.claimOnboardingStep(
+            {
+              userId,
+              workspaceId,
+              key: OnboardingStepKeys.ONBOARDING_INSTALL_APPS_PENDING,
+            },
+            queryRunner,
+          );
 
           if (!hasClaimedInstallAppsStep || isAutoSkipped) {
             return;
           }
 
-          await this.pushReversibleOnboardingStep(
-            {
-              userId,
-              workspaceId,
-              step: OnboardingStatus.APPS_INSTALLATION,
-            },
+          await this.onboardingHistoryService.push(
+            { userId, workspaceId },
+            OnboardingStatus.APPS_INSTALLATION,
             queryRunner,
           );
         },
@@ -695,8 +513,12 @@ export class OnboardingService {
       await this.runStepTransitionInLockedTransaction(
         { userId, workspaceId },
         async (queryRunner) =>
-          this.claimInstallAppsOnboardingStep(
-            { userId, workspaceId },
+          this.claimOnboardingStep(
+            {
+              userId,
+              workspaceId,
+              key: OnboardingStepKeys.ONBOARDING_INSTALL_APPS_PENDING,
+            },
             queryRunner,
           ),
       );
@@ -732,10 +554,7 @@ export class OnboardingService {
   private async releaseInstallAppsOnboardingStepClaim({
     userId,
     workspaceId,
-  }: {
-    userId: string;
-    workspaceId: string;
-  }) {
+  }: OnboardingContext) {
     try {
       await this.runStepTransitionInLockedTransaction(
         { userId, workspaceId },
@@ -760,40 +579,15 @@ export class OnboardingService {
   async clearReversibleOnboardingStepHistoryAfterAppsInstalled({
     userId,
     workspaceId,
-  }: {
-    userId: string;
-    workspaceId: string;
-  }) {
+  }: OnboardingContext) {
     await this.runStepTransitionInLockedTransaction(
       { userId, workspaceId },
       async (queryRunner) =>
-        this.clearReversibleOnboardingStepHistoryAfterIrreversibleStep(
+        this.onboardingHistoryService.clear(
           { userId, workspaceId },
           queryRunner,
         ),
     );
-  }
-
-  private async claimInstallAppsOnboardingStep(
-    {
-      userId,
-      workspaceId,
-    }: {
-      userId: string;
-      workspaceId: string;
-    },
-    queryRunner?: QueryRunner,
-  ): Promise<boolean> {
-    const affectedRows = await this.userVarsService.delete(
-      {
-        userId,
-        workspaceId,
-        key: OnboardingStepKeys.ONBOARDING_INSTALL_APPS_PENDING,
-      },
-      queryRunner,
-    );
-
-    return isDefined(affectedRows) && affectedRows > 0;
   }
 
   async creditInstallAppsReward({
@@ -803,23 +597,10 @@ export class OnboardingService {
     workspaceId: string;
     rewardAppsCount: number;
   }) {
-    try {
-      await this.billingCreditService.grantCredits({
-        workspaceId,
-        amountMicro:
-          this.twentyConfigService.get(
-            'ONBOARDING_INSTALL_APPS_CREDITS_REWARD_PER_APP',
-          ) * rewardAppsCount,
-        type: BillingCreditGrantType.ONBOARDING_REWARD,
-        reason: `Onboarding reward: install ${rewardAppsCount} app(s)`,
-        idempotencyKey: `onboarding-install-apps:${workspaceId}`,
-      });
-    } catch (error) {
-      this.logger.error(
-        `Failed to credit onboarding install-apps reward for workspace ${workspaceId}`,
-        error,
-      );
-    }
+    return this.onboardingRewardService.creditInstallAppsReward({
+      workspaceId,
+      rewardAppsCount,
+    });
   }
 
   async setOnboardingInviteTeamPending(
@@ -865,63 +646,16 @@ export class OnboardingService {
     workspaceId: string;
     employeeCount: number | null;
   }) {
-    // Reading the tiers throws on its own when the configured value is not a
-    // parseable JSON object, so it sits inside the guard with the grant: a
-    // reward nobody has configured correctly must not cost anyone their
-    // onboarding.
-    try {
-      const { amountMicro, malformedTierKeys } =
-        getOnboardingEnrichmentCreditRewardMicro({
-          employeeCount,
-          tiers: this.twentyConfigService.get(
-            'ONBOARDING_ENRICHMENT_CREDIT_REWARD_TIERS',
-          ),
-        });
-
-      if (malformedTierKeys.length > 0) {
-        // Dropping a malformed tier silently would under-pay every workspace
-        // that should have matched it, with nothing to notice it by.
-        this.exceptionHandlerService.captureExceptions([
-          new Error(
-            `Ignored malformed ONBOARDING_ENRICHMENT_CREDIT_REWARD_TIERS entries: ${malformedTierKeys.join(', ')}`,
-          ),
-        ]);
-      }
-
-      if (!isDefined(amountMicro)) {
-        return;
-      }
-
-      await this.billingCreditService.grantCredits({
-        workspaceId,
-        amountMicro,
-        type: BillingCreditGrantType.ONBOARDING_REWARD,
-        reason: 'Onboarding reward: enrichment-qualified workspace',
-        // The only gate on the reward, deliberately: it is keyed on the
-        // workspace rather than the enriching user so that a re-run of the
-        // enrichment, or a second member qualifying later, replays instead of
-        // topping up a balance the workspace already received.
-        idempotencyKey: `onboarding-enrichment-qualified:${workspaceId}`,
-      });
-    } catch (error) {
-      this.logger.error(
-        `Failed to credit onboarding enrichment qualification reward for workspace ${workspaceId}`,
-        error,
-      );
-
-      this.exceptionHandlerService.captureExceptions([error], {
-        workspace: { id: workspaceId },
-      });
-    }
+    return this.onboardingRewardService.creditEnrichmentQualificationReward({
+      workspaceId,
+      employeeCount,
+    });
   }
 
   async isOnboardingBookCallPending({
     userId,
     workspaceId,
-  }: {
-    userId: string;
-    workspaceId: string;
-  }): Promise<boolean> {
+  }: OnboardingContext): Promise<boolean> {
     if (
       !isDefined(readBookCallStepMinEmployeeCount(this.twentyConfigService))
     ) {
@@ -987,8 +721,12 @@ export class OnboardingService {
     await this.runStepTransitionInLockedTransaction(
       { userId, workspaceId },
       async (queryRunner) => {
-        const hasClaimedBookCallStep = await this.claimOnboardingBookCallStep(
-          { userId, workspaceId },
+        const hasClaimedBookCallStep = await this.claimOnboardingStep(
+          {
+            userId,
+            workspaceId,
+            key: OnboardingStepKeys.ONBOARDING_BOOK_CALL_PENDING,
+          },
           queryRunner,
         );
 
@@ -997,7 +735,7 @@ export class OnboardingService {
         }
 
         if (hasBookedCall) {
-          await this.clearReversibleOnboardingStepHistoryAfterIrreversibleStep(
+          await this.onboardingHistoryService.clear(
             { userId, workspaceId },
             queryRunner,
           );
@@ -1005,38 +743,13 @@ export class OnboardingService {
           return;
         }
 
-        await this.pushReversibleOnboardingStep(
-          {
-            userId,
-            workspaceId,
-            step: OnboardingStatus.BOOK_CALL,
-          },
+        await this.onboardingHistoryService.push(
+          { userId, workspaceId },
+          OnboardingStatus.BOOK_CALL,
           queryRunner,
         );
       },
     );
-  }
-
-  private async claimOnboardingBookCallStep(
-    {
-      userId,
-      workspaceId,
-    }: {
-      userId: string;
-      workspaceId: string;
-    },
-    queryRunner?: QueryRunner,
-  ): Promise<boolean> {
-    const affectedRows = await this.userVarsService.delete(
-      {
-        userId,
-        workspaceId,
-        key: OnboardingStepKeys.ONBOARDING_BOOK_CALL_PENDING,
-      },
-      queryRunner,
-    );
-
-    return isDefined(affectedRows) && affectedRows > 0;
   }
 
   async setOnboardingBookCallPendingIfQualified({
@@ -1167,48 +880,26 @@ export class OnboardingService {
     await this.runStepTransitionInLockedTransaction(
       { userId, workspaceId },
       async (queryRunner) => {
-        const hasClaimedCreateProfileStep =
-          await this.claimOnboardingCreateProfileStep(
-            { userId, workspaceId },
-            queryRunner,
-          );
+        const hasClaimedCreateProfileStep = await this.claimOnboardingStep(
+          {
+            userId,
+            workspaceId,
+            key: OnboardingStepKeys.ONBOARDING_CREATE_PROFILE_PENDING,
+          },
+          queryRunner,
+        );
 
         if (!hasClaimedCreateProfileStep) {
           return;
         }
 
-        await this.pushReversibleOnboardingStep(
-          {
-            userId,
-            workspaceId,
-            step: OnboardingStatus.PROFILE_CREATION,
-          },
+        await this.onboardingHistoryService.push(
+          { userId, workspaceId },
+          OnboardingStatus.PROFILE_CREATION,
           queryRunner,
         );
       },
     );
-  }
-
-  private async claimOnboardingCreateProfileStep(
-    {
-      userId,
-      workspaceId,
-    }: {
-      userId: string;
-      workspaceId: string;
-    },
-    queryRunner?: QueryRunner,
-  ): Promise<boolean> {
-    const affectedRows = await this.userVarsService.delete(
-      {
-        userId,
-        workspaceId,
-        key: OnboardingStepKeys.ONBOARDING_CREATE_PROFILE_PENDING,
-      },
-      queryRunner,
-    );
-
-    return isDefined(affectedRows) && affectedRows > 0;
   }
 
   async completeOnboardingInviteTeamStep({
@@ -1223,18 +914,20 @@ export class OnboardingService {
     await this.runStepTransitionInLockedTransaction(
       { userId, workspaceId },
       async (queryRunner) => {
-        const hasClaimedInviteTeamStep =
-          await this.claimOnboardingInviteTeamStep(
-            { workspaceId },
-            queryRunner,
-          );
+        const hasClaimedInviteTeamStep = await this.claimOnboardingStep(
+          {
+            workspaceId,
+            key: OnboardingStepKeys.ONBOARDING_INVITE_TEAM_PENDING,
+          },
+          queryRunner,
+        );
 
         if (!hasClaimedInviteTeamStep) {
           return;
         }
 
         if (hasSentInvitations) {
-          await this.clearReversibleOnboardingStepHistoryAfterIrreversibleStep(
+          await this.onboardingHistoryService.clear(
             { userId, workspaceId },
             queryRunner,
           );
@@ -1242,34 +935,12 @@ export class OnboardingService {
           return;
         }
 
-        await this.pushReversibleOnboardingStep(
-          {
-            userId,
-            workspaceId,
-            step: OnboardingStatus.INVITE_TEAM,
-          },
+        await this.onboardingHistoryService.push(
+          { userId, workspaceId },
+          OnboardingStatus.INVITE_TEAM,
           queryRunner,
         );
       },
     );
-  }
-
-  private async claimOnboardingInviteTeamStep(
-    {
-      workspaceId,
-    }: {
-      workspaceId: string;
-    },
-    queryRunner?: QueryRunner,
-  ): Promise<boolean> {
-    const affectedRows = await this.userVarsService.delete(
-      {
-        workspaceId,
-        key: OnboardingStepKeys.ONBOARDING_INVITE_TEAM_PENDING,
-      },
-      queryRunner,
-    );
-
-    return isDefined(affectedRows) && affectedRows > 0;
   }
 }
