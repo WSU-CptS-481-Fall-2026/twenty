@@ -49,7 +49,7 @@ export class ResetPasswordService {
     private readonly userService: UserService,
   ) {}
 
-async generateAndSendPasswordResetLink({
+  async sendPasswordResetLink({
     email,
     workspaceId,
     locale,
@@ -58,7 +58,10 @@ async generateAndSendPasswordResetLink({
     workspaceId?: string;
     locale: keyof typeof APP_LOCALES;
   }): Promise<void> {
-    const generationResult = await this.generatePasswordResetToken(email, workspaceId);
+    const generationResult = await this.generatePasswordResetToken(
+      email,
+      workspaceId,
+    );
 
     if (generationResult.status !== 'TOKEN_GENERATED') {
       this.logger.warn(
@@ -81,6 +84,52 @@ async generateAndSendPasswordResetLink({
     });
   }
 
+  async generatePasswordResetToken(
+    email: string,
+    workspaceId?: string,
+  ): Promise<PasswordResetTokenGenerationResult> {
+    const user = await this.userService.findUserByEmail(email);
+
+    if (!isDefined(user)) {
+      return { status: 'USER_NOT_FOUND' };
+    }
+
+    const targetWorkspace = await this.resolveTargetWorkspace(
+      user.id,
+      workspaceId,
+    );
+
+    if (!isDefined(targetWorkspace)) {
+      return { status: 'NO_PASSWORD_AUTH_ENABLED_WORKSPACE_FOUND' };
+    }
+
+    const expiresIn = this.twentyConfigService.get(
+      'PASSWORD_RESET_TOKEN_EXPIRES_IN',
+    );
+
+    if (!expiresIn) {
+      throw new AuthException(
+        'PASSWORD_RESET_TOKEN_EXPIRES_IN constant value not found',
+        AuthExceptionCode.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    const expiresAt = addMilliseconds(new Date().getTime(), ms(expiresIn));
+
+    const plainResetToken = crypto.randomBytes(32).toString('hex');
+
+    return {
+      status: 'TOKEN_GENERATED',
+      resetToken: {
+        workspaceId: targetWorkspace.id,
+        passwordResetToken: plainResetToken,
+        passwordResetTokenExpiresAt: expiresAt,
+      },
+      user,
+      workspace: targetWorkspace,
+    };
+  }
+
   async rotatePasswordResetToken({
     userId,
     resetToken,
@@ -94,7 +143,7 @@ async generateAndSendPasswordResetLink({
       .digest('hex');
 
     await this.appTokenRepository.manager.transaction(async (entityManager) => {
-      const appTokenRepository = entityManager.getRepository(AppTokenEntity);
+      const curAppTokenRepository = entityManager.getRepository(AppTokenEntity);
 
       await appTokenRepository.update(
         {
@@ -106,7 +155,7 @@ async generateAndSendPasswordResetLink({
         },
       );
 
-      await appTokenRepository.save({
+      await curAppTokenRepository.save({
         userId,
         workspaceId: resetToken.workspaceId,
         value: hashedResetToken,
