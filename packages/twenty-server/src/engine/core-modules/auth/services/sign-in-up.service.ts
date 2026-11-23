@@ -118,6 +118,34 @@ export class SignInUpService {
     private readonly dataSource: DataSource,
   ) {}
 
+  private getEmailFromUserData(
+    userData: ExistingUserOrPartialUserWithPicture['userData'],
+  ): string | undefined {
+    if (userData.type === 'newUserWithPicture') {
+      return userData.newUserWithPicture.email;
+    }
+
+    return userData.existingUser.email;
+  }
+
+  private getEmailOrThrow(
+    userData: ExistingUserOrPartialUserWithPicture['userData'],
+  ): string {
+    const email = this.getEmailFromUserData(userData);
+
+    if (!email) {
+      throw new AuthException(
+        'Email is required',
+        AuthExceptionCode.INVALID_INPUT,
+        {
+          userFriendlyMessage: msg`Email is required`,
+        },
+      );
+    }
+
+    return email;
+  }
+
   async computePartialUserFromUserPayload(
     newUserPayload: SignInUpNewUserPayload,
     authParams: AuthProviderWithPasswordType['authParams'],
@@ -225,20 +253,7 @@ export class SignInUpService {
       );
     }
 
-    const email =
-      params.userData.type === 'newUserWithPicture'
-        ? params.userData.newUserWithPicture.email
-        : params.userData.existingUser.email;
-
-    if (!email) {
-      throw new AuthException(
-        'Email is required',
-        AuthExceptionCode.INVALID_INPUT,
-        {
-          userFriendlyMessage: msg`Email is required`,
-        },
-      );
-    }
+    const email = this.getEmailOrThrow(params.userData);
 
     const invitationValidation =
       await this.workspaceInvitationService.validatePersonalInvitation({
@@ -337,18 +352,14 @@ export class SignInUpService {
   ) {
     await this.throwIfWorkspaceIsNotReadyForSignInUp(params.workspace, params);
 
-    const isNewUser = params.userData.type === 'newUserWithPicture';
-
-    if (isNewUser) {
-      const userData = params.userData as {
-        type: 'newUserWithPicture';
-        newUserWithPicture: PartialUserWithPicture;
-      };
-
-      const user = await this.saveNewUser(userData.newUserWithPicture, {
-        canAccessFullAdminPanel: false,
-        canImpersonate: false,
-      });
+    if (params.userData.type === 'newUserWithPicture') {
+      const user = await this.saveNewUser(
+        params.userData.newUserWithPicture,
+        {
+          canAccessFullAdminPanel: false,
+          canImpersonate: false,
+        },
+      );
 
       await this.activateOnboardingForUser({
         user,
@@ -366,12 +377,7 @@ export class SignInUpService {
       return user;
     }
 
-    const userData = params.userData as {
-      type: 'existingUser';
-      existingUser: UserEntity;
-    };
-
-    const user = userData.existingUser;
+    const user = params.userData.existingUser;
 
     await this.userWorkspaceService.addUserToWorkspaceIfUserNotInWorkspace(
       user,
@@ -700,20 +706,7 @@ export class SignInUpService {
     userData: ExistingUserOrPartialUserWithPicture['userData'],
     options?: { displayName?: string; subdomain?: string },
   ): Promise<ValidatedNewWorkspaceInput> {
-    const email =
-      userData.type === 'newUserWithPicture'
-        ? userData.newUserWithPicture.email
-        : userData.existingUser.email;
-
-    if (!email) {
-      throw new AuthException(
-        'Email is required',
-        AuthExceptionCode.INVALID_INPUT,
-        {
-          userFriendlyMessage: msg`Email is required`,
-        },
-      );
-    }
+    const email = this.getEmailOrThrow(userData);
 
     await this.assertWorkspaceCreationAllowed(userData);
 
