@@ -47,6 +47,7 @@ export class ResetPasswordService {
     private readonly emailService: EmailService,
     private readonly i18nService: I18nService,
     private readonly userService: UserService,
+    private readonly passwordResetEmailService: PasswordResetEmailService
   ) {}
 
   async sendPasswordResetLink({
@@ -58,7 +59,7 @@ export class ResetPasswordService {
     workspaceId?: string;
     locale: keyof typeof APP_LOCALES;
   }): Promise<void> {
-    const generationResult = await this.generatePasswordResetToken(
+    const generationResult = await this.generatePasswordResetTokenByConfig(
       email,
       workspaceId,
     );
@@ -84,7 +85,7 @@ export class ResetPasswordService {
     });
   }
 
-  async generatePasswordResetToken(
+  async generatePasswordResetTokenByConfig(
     email: string,
     workspaceId?: string,
   ): Promise<PasswordResetTokenGenerationResult> {
@@ -94,7 +95,7 @@ export class ResetPasswordService {
       return { status: 'USER_NOT_FOUND' };
     }
 
-    const targetWorkspace = await this.resolveTargetWorkspace(
+    const targetWorkspace = await this.resolveCurrentWorkspace(
       user.id,
       workspaceId,
     );
@@ -130,6 +131,20 @@ export class ResetPasswordService {
     };
   }
 
+  private hashToken(plainToken: string): string {
+    return crypto.createHash('sha256').update(plainToken).digest('hex');
+  }
+
+  private async revokeResetTokens(
+    repository: Repository<AppTokenEntity>,
+    userId: string,
+  ): Promise<void> {
+    await repository.update(
+      { userId, type: AppTokenType.PasswordResetToken },
+      { revokedAt: new Date() },
+    );
+  }
+
   async rotatePasswordResetToken({
     userId,
     resetToken,
@@ -137,23 +152,12 @@ export class ResetPasswordService {
     userId: string;
     resetToken: PasswordResetToken;
   }): Promise<void> {
-    const hashedResetToken = crypto
-      .createHash('sha256')
-      .update(resetToken.passwordResetToken)
-      .digest('hex');
+    const hashedResetToken = this.hashToken(resetToken.passwordResetToken);
 
     await this.appTokenRepository.manager.transaction(async (entityManager) => {
       const curAppTokenRepository = entityManager.getRepository(AppTokenEntity);
 
-      await appTokenRepository.update(
-        {
-          userId,
-          type: AppTokenType.PasswordResetToken,
-        },
-        {
-          revokedAt: new Date(),
-        },
-      );
+      await this.revokeResetTokens(curAppTokenRepository, userId);
 
       await curAppTokenRepository.save({
         userId,
@@ -165,7 +169,7 @@ export class ResetPasswordService {
     });
   }
 
-  private async resolveTargetWorkspace(
+  private async resolveCurrentWorkspace(
     userId: string,
     workspaceId?: string,
   ): Promise<WorkspaceEntity | null> {
@@ -193,10 +197,7 @@ export class ResetPasswordService {
   async validatePasswordResetToken(
     resetToken: string,
   ): Promise<ValidatePasswordResetTokenDTO> {
-    const hashedResetToken = crypto
-      .createHash('sha256')
-      .update(resetToken)
-      .digest('hex');
+    const hashedResetToken = this.hashToken(resetToken);
 
     const token = await this.appTokenRepository.findOne({
       where: {
@@ -226,7 +227,7 @@ export class ResetPasswordService {
     };
   }
 
-  async invalidatePasswordResetToken(
+  async invalidatePasswordResetTokens(
     userId: string,
   ): Promise<InvalidatePasswordDTO> {
     const user = await this.userService.findUserByIdOrThrow(
@@ -234,15 +235,7 @@ export class ResetPasswordService {
       new AuthException('User not found', AuthExceptionCode.INVALID_INPUT),
     );
 
-    await this.appTokenRepository.update(
-      {
-        userId: user.id,
-        type: AppTokenType.PasswordResetToken,
-      },
-      {
-        revokedAt: new Date(),
-      },
-    );
+    await this.revokeResetTokens(this.appTokenRepository, user.id);
 
     return { success: true };
   }
