@@ -89,7 +89,6 @@ type CreatedWorkspaceTransactionResult = {
 };
 
 @Injectable()
-// oxlint-disable-next-line twenty/inject-workspace-repository
 export class SignInUpService {
   private readonly logger = new Logger(SignInUpService.name);
 
@@ -388,6 +387,40 @@ export class SignInUpService {
     return user;
   }
 
+  private async markOnboardingStepPending(
+    step: 'connectAccount' | 'createProfile' | 'installApps',
+    userId: string,
+    workspaceId: string,
+    queryRunner?: QueryRunner,
+  ) {
+    const payload = {
+      userId,
+      workspaceId,
+      value: true,
+    };
+
+    if (step === 'connectAccount') {
+      await this.onboardingService.setOnboardingConnectAccountPending(
+        payload,
+        queryRunner,
+      );
+      return;
+    }
+
+    if (step === 'createProfile') {
+      await this.onboardingService.setOnboardingCreateProfilePending(
+        payload,
+        queryRunner,
+      );
+      return;
+    }
+
+    await this.onboardingService.setOnboardingInstallAppsPending(
+      payload,
+      queryRunner,
+    );
+  }
+
   private async activateOnboardingForUser(
     {
       user,
@@ -403,32 +436,26 @@ export class SignInUpService {
     queryRunner?: QueryRunner,
   ) {
     if (shouldShowConnectAccountStep) {
-      await this.onboardingService.setOnboardingConnectAccountPending(
-        {
-          userId: user.id,
-          workspaceId: workspace.id,
-          value: true,
-        },
+      await this.markOnboardingStepPending(
+        'connectAccount',
+        user.id,
+        workspace.id,
         queryRunner,
       );
     }
 
-    await this.onboardingService.setOnboardingCreateProfilePending(
-      {
-        userId: user.id,
-        workspaceId: workspace.id,
-        value: true,
-      },
+    await this.markOnboardingStepPending(
+      'createProfile',
+      user.id,
+      workspace.id,
       queryRunner,
     );
 
     if (shouldShowInstallAppsStep) {
-      await this.onboardingService.setOnboardingInstallAppsPending(
-        {
-          userId: user.id,
-          workspaceId: workspace.id,
-          value: true,
-        },
+      await this.markOnboardingStepPending(
+        'installApps',
+        user.id,
+        workspace.id,
         queryRunner,
       );
     }
